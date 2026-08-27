@@ -31,7 +31,7 @@
       var el = document.getElementById(id);
       if (el) { el.textContent = ""; el.classList.remove("is-on"); }
     });
-    ["login-email", "login-password", "signup-email", "signup-password", "forgot-email"].forEach(function (id) {
+    ["login-email", "login-password", "signup-name", "signup-email", "signup-password", "forgot-email"].forEach(function (id) {
       setBoxError(id, "");
     });
   }
@@ -84,12 +84,14 @@
     document.getElementById("pane-signup").addEventListener("submit", function (e) {
       e.preventDefault();
       clearMsgs();
+      var name = document.getElementById("signup-name").value.trim();
       var email = document.getElementById("signup-email").value.trim();
       var password = document.getElementById("signup-password").value;
+      if (!name) { setBoxError("signup-name", true); setMsg("signup-err", "Informe seu nome completo."); return; }
       if (!email) { setBoxError("signup-email", true); setMsg("signup-err", "Informe seu e-mail."); return; }
       if (password.length < 6) { setBoxError("signup-password", true); setMsg("signup-err", "A senha precisa ter pelo menos 6 caracteres."); return; }
       setLoading("signup-submit", true, "Criar minha conta", "Criando conta…");
-      global.DB.client.auth.signUp({ email: email, password: password }).then(function (res) {
+      global.DB.client.auth.signUp({ email: email, password: password, options: { data: { full_name: name } } }).then(function (res) {
         setLoading("signup-submit", false, "Criar minha conta", "Criando conta…");
         if (res.error) {
           setMsg("signup-err", friendlyError(res.error.message));
@@ -97,6 +99,8 @@
         }
         if (res.data && res.data.session) {
           // sem confirmação de e-mail: onAuthStateChange já assume daqui.
+          // garante o nome no perfil mesmo que o gatilho do banco ainda não tenha sido atualizado.
+          global.DB.client.from("profiles").update({ full_name: name }).eq("id", res.data.user.id).then(function () {});
           return;
         }
         setMsg("signup-ok", "Conta criada! Confira seu e-mail para confirmar o cadastro e depois entre na aba \"Entrar\".");
