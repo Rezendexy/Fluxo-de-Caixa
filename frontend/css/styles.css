@@ -245,6 +245,7 @@ input{font:inherit}
 .sheet th,.sheet td{border-bottom:1px solid var(--line);white-space:nowrap}
 .sheet thead th{background:var(--surface-2);border-bottom:1px solid var(--line-strong)}
 .sheet__corner{position:sticky;left:0;z-index:3;min-width:172px;background:var(--surface-2)}
+.sheet__monthhead,.sheet__cell,.sheet__computed{border-left:1px solid var(--line)}
 .sheet__monthhead{padding:11px 16px;text-align:right}
 .sheet__monthname{display:block;font-family:var(--ff-display);font-weight:600;font-size:13.5px;text-transform:capitalize}
 .sheet__monthyear{display:block;font-family:var(--ff-mono);font-size:10.5px;color:var(--muted);margin-top:1px}
