@@ -13,6 +13,7 @@
   var manualExtra = [];
   var pendingFocus = null;    // {row, col}
   var computed = null;
+  var scrollHintDismissed = false;
 
   function normalizeMonth(d) { return String(d).slice(0, 7) + "-01"; }
 
@@ -175,6 +176,15 @@
     });
   }
 
+  /* ============ dica de rolagem horizontal ============ */
+  function updateScrollHint() {
+    var el = document.getElementById("sheet-scroll");
+    var hint = document.getElementById("sheet-scrollhint");
+    if (!el || !hint) return;
+    var overflowing = el.scrollWidth > el.clientWidth + 2;
+    hint.classList.toggle("is-on", overflowing && !scrollHintDismissed);
+  }
+
   /* ============ render da tabela ============ */
   function cellHTML(rowKey, col, cellState) {
     var val = cellState.amount;
@@ -209,7 +219,7 @@
     categories.forEach(function (cat) {
       body += '<tr class="row--expense" data-cat-row="' + cat.id + '">' +
         '<td class="sheet__rowhead sheet__rowhead--editable">' +
-        '<input type="text" class="rowname" value="' + Format.esc(cat.name) + '" data-cat-name="' + cat.id + '">' +
+        '<input type="text" class="rowname" value="' + Format.esc(cat.name) + '" title="' + Format.esc(cat.name) + '" data-cat-name="' + cat.id + '">' +
         '<button type="button" class="rowremove" data-cat-remove="' + cat.id + '" aria-label="Remover ' + Format.esc(cat.name) + '">&times;</button>' +
         '</td>';
       months.forEach(function (m, col) { body += cellHTML("cat:" + cat.id, col, computed.expenses[cat.id][m]); });
@@ -243,6 +253,7 @@
     wireCells();
     wireRowHeads();
     renderHero();
+    updateScrollHint();
 
     if (pendingFocus) {
       var sel = '[data-row="' + pendingFocus.row + '"][data-col="' + pendingFocus.col + '"]';
@@ -307,6 +318,25 @@
       months.push(next);
       render();
     });
+
+    // redesenha o gráfico quando a tela muda de tamanho (ex.: girar o celular),
+    // já que o SVG usa a largura real do contêiner para o texto ficar legível.
+    var resizeTimer = null;
+    global.addEventListener("resize", function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () {
+        if (computed) renderHero();
+        updateScrollHint();
+      }, 150);
+    });
+
+    var scrollEl = document.getElementById("sheet-scroll");
+    if (scrollEl) {
+      scrollEl.addEventListener("scroll", function () {
+        scrollHintDismissed = true;
+        updateScrollHint();
+      }, { passive: true, once: true });
+    }
   }
 
   function show(u, p) {

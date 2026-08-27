@@ -4,7 +4,15 @@
   var shortMoney = Format.shortMoney;
   var esc = Format.esc;
 
-  var CW = 720, CH = 220, PAD = { t: 16, r: 10, b: 26, l: 54 };
+  var PAD = { t: 16, r: 10, b: 26 };
+  var FONT_SIZE = 12;
+
+  var measureCtx = null;
+  function textWidth(s) {
+    if (!measureCtx) measureCtx = document.createElement("canvas").getContext("2d");
+    measureCtx.font = "500 " + FONT_SIZE + "px 'IBM Plex Mono', ui-monospace, monospace";
+    return measureCtx.measureText(s).width;
+  }
 
   /**
    * cfg = {
@@ -19,6 +27,11 @@
       return;
     }
 
+    // o viewBox usa a largura real do contêiner (não um valor fixo) para que o
+    // texto do SVG renderize no tamanho real em px, e não fique minúsculo em telas estreitas.
+    var CW = Math.max(240, Math.round(host.getBoundingClientRect().width) || 720);
+    var CH = 200;
+
     var values = cfg.values;
     var n = values.length - 1;
     var max = Math.max.apply(null, values.concat([0]));
@@ -28,8 +41,15 @@
     min = min - span * 0.15;
     span = max - min;
 
-    var iw = CW - PAD.l - PAD.r, ih = CH - PAD.t - PAD.b;
-    var X = function (k) { return PAD.l + (n === 0 ? iw / 2 : (k / n) * iw); };
+    // largura da margem esquerda calculada a partir do rótulo mais largo de fato
+    // renderizado (ex.: "R$ -12,9 mil"), para nunca cortar o texto do eixo — mas
+    // sem deixar a margem engolir o gráfico inteiro em telas muito estreitas.
+    var gridLabels = [0, 1, 2].map(function (g) { return shortMoney(min + (span / 2) * g); });
+    var maxLabelW = Math.max.apply(null, gridLabels.map(textWidth));
+    var padL = Math.min(Math.max(40, Math.ceil(maxLabelW) + 16), Math.round(CW * 0.42));
+
+    var iw = CW - padL - PAD.r, ih = CH - PAD.t - PAD.b;
+    var X = function (k) { return padL + (n === 0 ? iw / 2 : (k / n) * iw); };
     var Y = function (v) { return PAD.t + ih - ((v - min) / span) * ih; };
 
     var uid = (host.id || "chart") + "-" + Math.random().toString(36).slice(2, 7);
@@ -47,18 +67,23 @@
     for (var g = 0; g <= 2; g++) {
       var val = min + (span / 2) * g, y = Y(val);
       var isZero = min < 0 && max > 0 && Math.abs(val) < span * 0.02;
-      svg += '<line x1="' + PAD.l + '" y1="' + y.toFixed(1) + '" x2="' + (CW - PAD.r) + '" y2="' + y.toFixed(1) + '" stroke="var(--line)" stroke-width="1"/>';
-      svg += '<text x="' + (PAD.l - 8) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" font-weight="500" fill="var(--muted)">' + esc(shortMoney(val)) + '</text>';
+      svg += '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (CW - PAD.r) + '" y2="' + y.toFixed(1) + '" stroke="var(--line)" stroke-width="1"/>';
+      svg += '<text x="' + (padL - 8) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end" font-weight="500" fill="var(--muted)">' + esc(gridLabels[g]) + '</text>';
     }
     if (min < 0 && max > 0) {
       var yz = Y(0);
-      svg += '<line x1="' + PAD.l + '" y1="' + yz.toFixed(1) + '" x2="' + (CW - PAD.r) + '" y2="' + yz.toFixed(1) + '" stroke="var(--line-strong)" stroke-width="1.3"/>';
+      svg += '<line x1="' + padL + '" y1="' + yz.toFixed(1) + '" x2="' + (CW - PAD.r) + '" y2="' + yz.toFixed(1) + '" stroke="var(--line-strong)" stroke-width="1.3"/>';
     }
 
-    // rótulos do eixo x (poucos, para não poluir)
-    var step = Math.max(1, Math.ceil((n + 1) / 6));
+    // rótulos do eixo x: a quantidade exibida se adapta à largura real disponível
+    // (em telas estreitas cabem menos rótulos sem se sobrepor); nas pontas o texto
+    // ancora para dentro do gráfico em vez de centralizar, senão vaza pela borda do SVG.
+    var maxXLabelW = Math.max.apply(null, cfg.labels.map(textWidth).concat([1]));
+    var maxTicks = Math.max(2, Math.floor(iw / (maxXLabelW + 14)) + 1);
+    var step = Math.max(1, Math.ceil((n + 1) / maxTicks));
     for (var k = 0; k <= n; k += step) {
-      svg += '<text x="' + X(k).toFixed(1) + '" y="' + (CH - 8) + '" text-anchor="middle" fill="var(--muted)">' + esc(cfg.labels[k]) + '</text>';
+      var anchor = k === 0 ? "start" : (k === n ? "end" : "middle");
+      svg += '<text x="' + X(k).toFixed(1) + '" y="' + (CH - 8) + '" text-anchor="' + anchor + '" fill="var(--muted)">' + esc(cfg.labels[k]) + '</text>';
     }
 
     function path(vals, close) {
@@ -74,7 +99,7 @@
 
     svg += '<line class="js-guide" x1="0" y1="' + PAD.t + '" x2="0" y2="' + (PAD.t + ih) + '" stroke="var(--line-strong)" stroke-width="1.5" opacity="0"/>';
     svg += '<circle class="js-dot" r="5" fill="var(--ink)" stroke="var(--surface)" stroke-width="2" opacity="0"/>';
-    svg += '<rect class="js-hit" x="' + PAD.l + '" y="' + PAD.t + '" width="' + iw + '" height="' + ih + '" fill="transparent"/>';
+    svg += '<rect class="js-hit" x="' + padL + '" y="' + PAD.t + '" width="' + iw + '" height="' + ih + '" fill="transparent"/>';
     svg += "</svg>";
 
     host.innerHTML = svg + '<div class="tip"></div>';
@@ -89,7 +114,7 @@
       var r = svgEl.getBoundingClientRect();
       if (!r.width) return;
       var px = (ev.clientX - r.left) * (CW / r.width);
-      var k = Math.round(((px - PAD.l) / iw) * n);
+      var k = Math.round(((px - padL) / iw) * n);
       if (k < 0) k = 0; if (k > n) k = n;
       guide.setAttribute("x1", X(k).toFixed(2));
       guide.setAttribute("x2", X(k).toFixed(2));
