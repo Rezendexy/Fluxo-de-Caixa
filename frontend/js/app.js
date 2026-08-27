@@ -54,6 +54,7 @@
 
     db.from("profiles").select("*").eq("id", session.user.id).single().then(function (res) {
       var profile = res.data;
+      document.getElementById("userbox-email").textContent = (profile && profile.full_name) || session.user.email;
       if (!profile || !profile.onboarding_completed) {
         showView("onboarding");
         window.OnboardingView.show(session.user, profile, function () { route(session); });
