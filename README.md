@@ -88,6 +88,14 @@ create table public.expense_entries (
 );
 alter table public.expense_entries enable row level security;
 create policy "expenses_all_own" on public.expense_entries for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- permissão de acesso às tabelas para quem está logado (o RLS acima já limita
+-- cada aluno às próprias linhas; sem isso o Supabase recusa tudo com "permission denied")
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.profiles to authenticated;
+grant select, insert, update, delete on public.categories to authenticated;
+grant select, insert, update, delete on public.income_entries to authenticated;
+grant select, insert, update, delete on public.expense_entries to authenticated;
 ```
 
 Isso cria as 4 tabelas, liga o RLS (cada aluno só enxerga as próprias linhas) e o gatilho que cria o perfil automaticamente no cadastro.
@@ -146,7 +154,7 @@ backend/
 ## Modelo de dados
 
 - **profiles**: 1 linha por aluno — receita mensal padrão e se já concluiu a configuração inicial.
-- **categories**: os gastos que o aluno cadastrou (nome + valor estimado usado como sugestão em meses novos).
+- **categories**: os gastos que o aluno cadastrou (nome; o valor de cada mês é preenchido depois, direto na planilha).
 - **income_entries** / **expense_entries**: os valores realmente lançados em cada mês. Quando não existe lançamento para um mês, a planilha mostra a receita/estimativa padrão como sugestão (em cinza) — assim que o aluno confirma um valor, ele vira um lançamento de verdade daquele mês.
 
 ## Aviso

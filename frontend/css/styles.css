@@ -203,11 +203,9 @@ input{font:inherit}
 .tab--step.is-done .tab__n::after{content:" ✓";color:var(--accent-ink)}
 
 .ob-rows{display:flex;flex-direction:column;gap:10px;margin-top:16px}
-.ob-row{display:grid;grid-template-columns:minmax(0,1fr) 150px auto;gap:8px;align-items:center}
+.ob-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
 .ob-row__name{border:1px solid var(--line-strong);background:var(--surface-2);border-radius:11px;padding:12px 13px;font-size:14.5px;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis}
 .ob-row__name:focus{outline:none;border-color:var(--focus);box-shadow:0 0 0 3px var(--accent-soft)}
-.ob-row__valuebox{margin:0}
-.ob-row__valuebox input{text-align:right}
 .ob-row__remove{width:34px;height:34px;flex:none;border:1px solid var(--line);border-radius:9px;background:transparent;font-size:18px;line-height:1;color:var(--muted);cursor:pointer}
 .ob-row__remove:hover{border-color:var(--danger);color:var(--danger)}
 .ob-addrow{width:100%;margin-top:12px;flex:none;text-align:center}
@@ -296,9 +294,6 @@ footer{margin-top:46px;border-top:1px solid var(--line);padding:22px 0 40px;font
   .userbox__email{display:none}
   .tabs{grid-template-columns:1fr;gap:7px}
   .tabs--2{grid-template-columns:repeat(2,1fr)}
-  .ob-row{grid-template-columns:minmax(0,1fr) auto;gap:8px}
-  .ob-row__name{grid-column:1 / -1}
-  .ob-row__valuebox{min-width:0}
   .actions{flex-direction:column-reverse}
   .sheetcard__head{flex-direction:column}
   .sheet__rowhead,.sheet__corner,.rowname{min-width:136px}

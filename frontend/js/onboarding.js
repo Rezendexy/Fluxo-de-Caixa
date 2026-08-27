@@ -27,27 +27,23 @@
     if (err) { err.textContent = msg || ""; err.classList.toggle("is-on", !!msg); }
   }
 
-  function addRow(name, value) {
+  function addRow(name) {
     rowSeq++;
     var wrap = document.createElement("div");
     wrap.className = "ob-row";
     wrap.innerHTML =
       '<input type="text" class="ob-row__name" placeholder="Nome do gasto" value="' + Format.esc(name || "") + '">' +
-      '<div class="input ob-row__valuebox"><span class="input__affix">R$</span>' +
-      '<input type="text" inputmode="decimal" class="ob-row__value" placeholder="0,00" value="' + (value ? Format.fmtNum.format(value) : "") + '"></div>' +
       '<button type="button" class="ob-row__remove" aria-label="Remover gasto">&times;</button>';
 
     var nameEl = wrap.querySelector(".ob-row__name");
-    var valueEl = wrap.querySelector(".ob-row__value");
-    valueEl.addEventListener("blur", function () { moneyMaskBlur(valueEl); });
     wrap.querySelector(".ob-row__remove").addEventListener("click", function () {
       rows = rows.filter(function (r) { return r.wrapEl !== wrap; });
       wrap.remove();
     });
 
     document.getElementById("ob-rows").appendChild(wrap);
-    rows.push({ id: rowSeq, nameEl: nameEl, valueEl: valueEl, wrapEl: wrap });
-    if (!name) nameEl.focus(); else valueEl.focus();
+    rows.push({ id: rowSeq, nameEl: nameEl, wrapEl: wrap });
+    if (!name) nameEl.focus();
   }
 
   function resetRows() {
@@ -82,11 +78,11 @@
         var name = chip.getAttribute("data-cat");
         var already = rows.some(function (r) { return r.nameEl.value.trim().toLowerCase() === name.toLowerCase(); });
         if (already) return;
-        addRow(name, 0);
+        addRow(name);
       });
     });
 
-    document.getElementById("ob-add-row").addEventListener("click", function () { addRow("", 0); });
+    document.getElementById("ob-add-row").addEventListener("click", function () { addRow(""); });
 
     document.getElementById("ob-step2-finish").addEventListener("click", finish);
   }
@@ -94,27 +90,13 @@
   function finish() {
     var income = Format.parseNumber(document.getElementById("ob-income").value);
     var categories = [];
-    var hasError = false;
 
     rows.forEach(function (r) {
       var name = r.nameEl.value.trim();
-      var value = Format.parseNumber(r.valueEl.value);
-      if (!isFinite(value)) value = 0;
-      if (!name && value <= 0) return; // linha em branco, ignora
-      if (!name) {
-        r.nameEl.classList.add("is-error");
-        hasError = true;
-        return;
-      }
-      r.nameEl.classList.remove("is-error");
-      categories.push({ name: name, monthly_estimate: value });
+      if (!name) return; // linha em branco, ignora
+      categories.push({ name: name, monthly_estimate: 0 });
     });
 
-    if (hasError) {
-      document.getElementById("ob-rows-err").textContent = "Dê um nome para cada gasto que tiver valor.";
-      document.getElementById("ob-rows-err").classList.add("is-on");
-      return;
-    }
     if (categories.length === 0) {
       document.getElementById("ob-rows-err").textContent = "Adicione pelo menos um gasto para continuar.";
       document.getElementById("ob-rows-err").classList.add("is-on");
