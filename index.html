@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="app-version" content="1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meu Fluxo de Caixa</title>
+<meta name="description" content="Controle sua receita e seus gastos mês a mês e acompanhe quanto você já economizou.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23272259'/%3E%3Cpath d='M8 12h16a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z' fill='none' stroke='%23fff' stroke-width='1.8'/%3E%3Ccircle cx='22' cy='17.5' r='2.3' fill='%233CEFA2'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="frontend/css/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar__in">
+    <a class="brand" href="index.html" aria-label="Recarregar a página">
+      <img class="brand__logo brand__logo--light" src="frontend/img/finexperts-preto.png" alt="Financial Experts">
+      <img class="brand__logo brand__logo--dark" src="frontend/img/financial-experts-branco.png" alt="Financial Experts">
+      <span class="brand__sep" aria-hidden="true"></span>
+      <span class="brand__name">Meu Fluxo de Caixa</span>
+    </a>
+
+    <div class="userbox" id="userbox" hidden>
+      <span class="userbox__email" id="userbox-email"></span>
+      <button class="btn btn--ghost glass btn--sm" id="btn-logout" type="button">Sair</button>
+    </div>
+
+    <button class="iconbtn glass" id="tema" type="button" aria-label="Alternar tema claro e escuro" title="Alternar tema claro e escuro">
+      <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ CARREGANDO ============ -->
+  <section id="view-loading" class="loading">
+    <div class="spinner" aria-hidden="true"></div>
+    <p>Carregando…</p>
+  </section>
+
+  <!-- ============ SETUP AUSENTE ============ -->
+  <section id="view-setup" class="panel" hidden>
+    <div class="card setup-card">
+      <p class="card__kicker">Configuração pendente</p>
+      <h2 class="card__title">Falta ligar o Supabase</h2>
+      <p class="card__sub" style="margin-top:10px">Este projeto precisa de um projeto Supabase para guardar login e dados dos alunos. Abra <code>frontend/js/config.js</code> e cole a URL e a chave anônima do seu projeto. O passo a passo completo está no <code>README.md</code>.</p>
+    </div>
+  </section>
+
+  <!-- ============ LOGIN / CRIAR CONTA ============ -->
+  <section id="view-auth" class="panel auth" hidden>
+    <div class="auth__intro">
+      <h1>Organize seu dinheiro,<br>mês a mês.</h1>
+      <p>Entre com seu e-mail para registrar sua receita e seus gastos, e ver o quanto você está conseguindo economizar.</p>
+    </div>
+
+    <div class="card auth__card">
+      <div class="tabs tabs--2" role="tablist" aria-label="Escolha entrar ou criar conta">
+        <button class="tab glass" role="tab" id="tab-login" aria-controls="pane-login" aria-selected="true" type="button">Entrar</button>
+        <button class="tab glass" role="tab" id="tab-signup" aria-controls="pane-signup" aria-selected="false" tabindex="-1" type="button">Criar conta</button>
+      </div>
+
+      <!-- ---- entrar ---- -->
+      <form id="pane-login" role="tabpanel" aria-labelledby="tab-login" class="card__body" novalidate>
+        <div class="field">
+          <label for="login-email">E-mail</label>
+          <div class="input" id="login-email-box">
+            <input id="login-email" type="email" autocomplete="email" placeholder="voce@email.com" required>
+          </div>
+        </div>
+        <div class="field">
+          <label for="login-password">Senha</label>
+          <div class="input" id="login-password-box">
+            <input id="login-password" type="password" autocomplete="current-password" placeholder="Sua senha" required>
+          </div>
+        </div>
+        <p class="error" role="alert" aria-live="polite" id="login-err"></p>
+        <div class="actions actions--1">
+          <button class="btn btn--primary glass" type="submit" id="login-submit">Entrar</button>
+        </div>
+        <button class="linklike" type="button" id="btn-forgot">Esqueceu a senha?</button>
+      </form>
+
+      <!-- ---- criar conta ---- -->
+      <form id="pane-signup" role="tabpanel" aria-labelledby="tab-signup" class="card__body" hidden novalidate>
+        <div class="field">
+          <label for="signup-email">E-mail</label>
+          <div class="input" id="signup-email-box">
+            <input id="signup-email" type="email" autocomplete="email" placeholder="voce@email.com" required>
+          </div>
+        </div>
+        <div class="field">
+          <label for="signup-password">Crie uma senha</label>
+          <span class="hint">Pelo menos 6 caracteres.</span>
+          <div class="input" id="signup-password-box">
+            <input id="signup-password" type="password" autocomplete="new-password" placeholder="Sua senha" required minlength="6">
+          </div>
+        </div>
+        <p class="error" role="alert" aria-live="polite" id="signup-err"></p>
+        <p class="ok" role="status" aria-live="polite" id="signup-ok"></p>
+        <div class="actions actions--1">
+          <button class="btn btn--primary glass" type="submit" id="signup-submit">Criar minha conta</button>
+        </div>
+      </form>
+
+      <!-- ---- esqueci a senha ---- -->
+      <form id="pane-forgot" class="card__body" hidden novalidate>
+        <p class="card__sub" style="margin-bottom:14px">Informe seu e-mail. Vamos enviar um link para você criar uma nova senha.</p>
+        <div class="field">
+          <label for="forgot-email">E-mail</label>
+          <div class="input" id="forgot-email-box">
+            <input id="forgot-email" type="email" autocomplete="email" placeholder="voce@email.com" required>
+          </div>
+        </div>
+        <p class="error" role="alert" aria-live="polite" id="forgot-err"></p>
+        <p class="ok" role="status" aria-live="polite" id="forgot-ok"></p>
+        <div class="actions">
+          <button class="btn btn--ghost glass" type="button" id="btn-forgot-back">Voltar</button>
+          <button class="btn btn--primary glass" type="submit" id="forgot-submit">Enviar link</button>
+        </div>
+      </form>
+
+      <!-- ---- definir nova senha (vindo do e-mail de recuperação) ---- -->
+      <form id="pane-newpass" class="card__body" hidden novalidate>
+        <p class="card__sub" style="margin-bottom:14px">Crie sua nova senha para continuar.</p>
+        <div class="field">
+          <label for="newpass-password">Nova senha</label>
+          <div class="input" id="newpass-password-box">
+            <input id="newpass-password" type="password" autocomplete="new-password" placeholder="Nova senha" required minlength="6">
+          </div>
+        </div>
+        <p class="error" role="alert" aria-live="polite" id="newpass-err"></p>
+        <div class="actions actions--1">
+          <button class="btn btn--primary glass" type="submit" id="newpass-submit">Salvar nova senha</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ============ ONBOARDING ============ -->
+  <section id="view-onboarding" class="panel" hidden>
+    <div class="hero hero--onboarding">
+      <h1>Vamos montar seu fluxo de caixa</h1>
+      <p>Só duas etapas rápidas. Depois disso você já vê sua planilha pronta para usar.</p>
+    </div>
+
+    <div class="tabs tabs--2 tabs--steps" role="list" aria-label="Etapas">
+      <div class="tab tab--step is-active" id="step-tab-1"><span class="tab__n">01</span><span class="tab__t">Sua receita</span></div>
+      <div class="tab tab--step" id="step-tab-2"><span class="tab__n">02</span><span class="tab__t">Seus gastos</span></div>
+    </div>
+
+    <!-- ---- etapa 1: receita ---- -->
+    <div class="card" id="step-1">
+      <div class="card__head">
+        <p class="card__kicker">Etapa 01 de 02</p>
+        <h2 class="card__title">Quanto você recebe por mês?</h2>
+        <p class="card__sub">Pode ser mesada, salário do primeiro emprego, freelas — o que entrar todo mês no seu bolso.</p>
+      </div>
+      <div class="card__body">
+        <div class="field">
+          <label for="ob-income">Receita mensal</label>
+          <div class="input" id="ob-income-box">
+            <span class="input__affix">R$</span>
+            <input id="ob-income" type="text" inputmode="decimal" placeholder="1.000,00" autocomplete="off">
+          </div>
+          <p class="error" role="alert" aria-live="polite" id="ob-income-err"></p>
+          <div class="chips">
+            <button class="chip glass" type="button" data-fill="ob-income" data-value="300">R$ 300</button>
+            <button class="chip glass" type="button" data-fill="ob-income" data-value="500">R$ 500</button>
+            <button class="chip glass" type="button" data-fill="ob-income" data-value="1000">R$ 1.000</button>
+            <button class="chip glass" type="button" data-fill="ob-income" data-value="2000">R$ 2.000</button>
+          </div>
+        </div>
+        <div class="actions actions--1">
+          <button class="btn btn--primary glass" type="button" id="ob-step1-next">Continuar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- etapa 2: gastos ---- -->
+    <div class="card" id="step-2" hidden>
+      <div class="card__head">
+        <p class="card__kicker">Etapa 02 de 02</p>
+        <h2 class="card__title">Quais são os seus gastos do mês?</h2>
+        <p class="card__sub">Adicione cada tipo de gasto com um valor aproximado. Dá para ajustar mês a mês depois.</p>
+      </div>
+      <div class="card__body">
+        <div class="chips" id="ob-suggestions">
+          <button class="chip glass" type="button" data-cat="Lanches">+ Lanches</button>
+          <button class="chip glass" type="button" data-cat="Roupas">+ Roupas</button>
+          <button class="chip glass" type="button" data-cat="Tênis">+ Tênis</button>
+          <button class="chip glass" type="button" data-cat="Shopping">+ Shopping</button>
+          <button class="chip glass" type="button" data-cat="Jogos">+ Jogos</button>
+          <button class="chip glass" type="button" data-cat="Aulas extras">+ Aulas extras</button>
+          <button class="chip glass" type="button" data-cat="Transporte">+ Transporte</button>
+          <button class="chip glass" type="button" data-cat="Outros">+ Outros</button>
+        </div>
+
+        <div class="ob-rows" id="ob-rows"></div>
+
+        <button class="btn btn--ghost glass ob-addrow" type="button" id="ob-add-row">+ Adicionar outro gasto</button>
+
+        <p class="error" role="alert" aria-live="polite" id="ob-rows-err"></p>
+
+        <div class="actions">
+          <button class="btn btn--ghost glass" type="button" id="ob-step2-back">Voltar</button>
+          <button class="btn btn--primary glass" type="button" id="ob-step2-finish">Concluir e ver meu fluxo de caixa</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PLANILHA ============ -->
+  <section id="view-sheet" class="panel" hidden>
+
+    <div class="herostats">
+      <div class="card herostat herostat--big" id="hs-total">
+        <span class="herostat__icon" aria-hidden="true">🏆</span>
+        <p class="herostat__label">Total economizado</p>
+        <p class="herostat__value" id="hs-total-value">R$ 0,00</p>
+        <p class="herostat__caption" id="hs-total-caption">desde que você começou a controlar seus gastos</p>
+      </div>
+      <div class="card herostat" id="hs-month">
+        <p class="herostat__label">Economia deste mês</p>
+        <p class="herostat__value" id="hs-month-value">R$ 0,00</p>
+        <p class="herostat__caption" id="hs-month-caption">—</p>
+      </div>
+      <div class="card herostat" id="hs-streak">
+        <p class="herostat__label">Meses no azul</p>
+        <p class="herostat__value" id="hs-streak-value">0</p>
+        <p class="herostat__caption">de <span id="hs-streak-total">0</span> meses registrados</p>
+      </div>
+    </div>
+
+    <div class="card chart" style="padding:18px 20px 20px">
+      <div class="chart__head">
+        <p class="chart__title">Evolução da sua economia acumulada</p>
+      </div>
+      <div id="sheet-chart" data-chart></div>
+    </div>
+
+    <div class="sheetcard card">
+      <div class="sheetcard__head">
+        <div>
+          <p class="card__kicker">Sua planilha</p>
+          <h2 class="card__title">Receita e gastos, mês a mês</h2>
+        </div>
+        <button class="btn btn--ghost glass btn--sm" type="button" id="btn-add-month">+ Adicionar mês</button>
+      </div>
+      <p class="sheet-savehint" id="sheet-savehint" aria-live="polite">&nbsp;</p>
+      <div class="sheet-scroll">
+        <table class="sheet" id="sheet-table">
+          <thead id="sheet-thead"></thead>
+          <tbody id="sheet-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </section>
+
+</main>
+
+<footer>
+  <p>Os valores ficam salvos com segurança na sua conta — só você tem acesso aos seus dados.</p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="backend/js/finance.js"></script>
+<script src="frontend/js/config.js"></script>
+<script src="frontend/js/supabaseClient.js"></script>
+<script src="frontend/js/format.js"></script>
+<script src="frontend/js/chart.js"></script>
+<script src="frontend/js/auth.js"></script>
+<script src="frontend/js/onboarding.js"></script>
+<script src="frontend/js/sheet.js"></script>
+<script src="frontend/js/app.js"></script>
+</body>
+</html>
