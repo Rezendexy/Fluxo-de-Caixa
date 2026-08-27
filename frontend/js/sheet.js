@@ -133,6 +133,56 @@
     });
   }
 
+  /* ============ remover mês (só nas pontas) ============ */
+  // a planilha é sempre um intervalo contínuo entre o mês inicial e o mais
+  // recente, então só dá pra encolher pelas pontas: tirando o primeiro mês
+  // (empurra o início pra frente) ou desfazendo um mês futuro adicionado
+  // manualmente (o mês atual de verdade nunca sai, ele volta sozinho).
+  function deleteMonthEntries(monthKey) {
+    return Promise.all([
+      global.DB.client.from("income_entries").delete().eq("month", monthKey),
+      global.DB.client.from("expense_entries").delete().eq("month", monthKey)
+    ]).then(function (results) {
+      return results.some(function (r) { return r.error; });
+    });
+  }
+  function removeFirstMonth() {
+    if (months.length <= 1) return;
+    var monthKey = months[0];
+    if (!global.confirm("Remover " + Fi.monthLabel(monthKey) + " de " + Fi.yearOf(monthKey) + " da planilha? Os lançamentos desse mês serão apagados.")) return;
+    setHint("Removendo…");
+    var nextStart = months[1];
+    deleteMonthEntries(monthKey).then(function (hadError) {
+      if (hadError) { setHint("Não foi possível remover.", true); return; }
+      global.DB.client.from("profiles").update({ start_month: nextStart }).eq("id", user.id).then(function (res) {
+        if (res.error) { setHint("Não foi possível salvar.", true); return; }
+        profile.start_month = nextStart;
+        delete incomeByMonth[monthKey];
+        delete expensesByMonth[monthKey];
+        manualExtra = manualExtra.filter(function (m) { return m !== monthKey; });
+        recomputeMonths();
+        setHint("Tudo salvo.");
+        render();
+      });
+    });
+  }
+  function removeLastMonth() {
+    if (months.length <= 1) return;
+    var monthKey = months[months.length - 1];
+    if (manualExtra.indexOf(monthKey) === -1) return; // o mês atual de verdade não pode ser removido
+    if (!global.confirm("Remover " + Fi.monthLabel(monthKey) + " de " + Fi.yearOf(monthKey) + " da planilha?")) return;
+    setHint("Removendo…");
+    deleteMonthEntries(monthKey).then(function (hadError) {
+      if (hadError) { setHint("Não foi possível remover.", true); return; }
+      delete incomeByMonth[monthKey];
+      delete expensesByMonth[monthKey];
+      manualExtra = manualExtra.filter(function (m) { return m !== monthKey; });
+      recomputeMonths();
+      setHint("Tudo salvo.");
+      render();
+    });
+  }
+
   /* ============ hero stats + gráfico ============ */
   function renderHero() {
     var today = Fi.todayKey();
@@ -202,12 +252,19 @@
 
     // ---- cabeçalho ----
     var thead = '<tr><th class="sheet__corner">&nbsp;</th>';
-    months.forEach(function (m) {
-      thead += '<th class="sheet__monthhead"><span class="sheet__monthname">' + Format.capitalize(Fi.monthLabel(m)) + '</span>' +
+    months.forEach(function (m, col) {
+      var isFirst = col === 0;
+      var isLast = col === months.length - 1;
+      var removable = months.length > 1 && (isFirst || (isLast && manualExtra.indexOf(m) > -1));
+      var removeBtn = removable
+        ? '<button type="button" class="sheet__monthremove" data-month-remove="' + col + '" aria-label="Remover ' + Format.esc(Fi.monthLabel(m)) + '">&times;</button>'
+        : "";
+      thead += '<th class="sheet__monthhead">' + removeBtn + '<span class="sheet__monthname">' + Format.capitalize(Fi.monthLabel(m)) + '</span>' +
         '<span class="sheet__monthyear">' + Fi.yearOf(m) + '</span></th>';
     });
     thead += "</tr>";
     document.getElementById("sheet-thead").innerHTML = thead;
+    wireMonthHeads();
 
     // ---- corpo ----
     var body = "";
@@ -261,6 +318,15 @@
       pendingFocus = null;
       if (el) { el.focus(); el.select(); }
     }
+  }
+
+  function wireMonthHeads() {
+    document.querySelectorAll("[data-month-remove]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var col = parseInt(btn.getAttribute("data-month-remove"), 10);
+        if (col === 0) removeFirstMonth(); else removeLastMonth();
+      });
+    });
   }
 
   function wireCells() {
