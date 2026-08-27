@@ -97,7 +97,7 @@ Isso cria as 4 tabelas, liga o RLS (cada aluno só enxerga as próprias linhas) 
 Vá em **Authentication → Providers → Email** e confira:
 
 - **Enable Email provider**: ligado (é o padrão).
-- **Confirm email**: recomendo **desligar** para os alunos entrarem direto após criar a conta, sem precisar abrir e-mail. Se preferir manter a confirmação por segurança, deixe ligado — o app já avisa "confira seu e-mail" nesse caso, só demora um passo a mais.
+- **Confirm email**: **desligado**. Assim os alunos entram direto após criar a conta, sem precisar abrir e-mail. Se você ligar essa opção depois, o cadastro fica pendente de confirmação e o app não avisa disso — o aluno só consegue entrar depois de confirmar o e-mail.
 
 Em **Authentication → URL Configuration**, coloque em **Site URL** o endereço onde o app vai ficar publicado (ex.: `https://seu-usuario.github.io/nome-do-repo/`). É esse endereço que o link de "esqueci minha senha" usa para voltar ao app.
 

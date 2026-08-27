@@ -27,7 +27,7 @@
     el.classList.toggle("is-on", !!msg);
   }
   function clearMsgs() {
-    ["login-err", "signup-err", "signup-ok", "forgot-err", "forgot-ok", "newpass-err"].forEach(function (id) {
+    ["login-err", "signup-err", "forgot-err", "forgot-ok", "newpass-err"].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) { el.textContent = ""; el.classList.remove("is-on"); }
     });
@@ -97,14 +97,11 @@
           setMsg("signup-err", friendlyError(res.error.message));
           return;
         }
-        if (res.data && res.data.session) {
-          // sem confirmação de e-mail: onAuthStateChange já assume daqui.
-          // garante o nome no perfil mesmo que o gatilho do banco ainda não tenha sido atualizado.
+        // onAuthStateChange já assume daqui; garante o nome no perfil mesmo que
+        // o gatilho do banco ainda não tenha sido atualizado.
+        if (res.data && res.data.user) {
           global.DB.client.from("profiles").update({ full_name: name }).eq("id", res.data.user.id).then(function () {});
-          return;
         }
-        setMsg("signup-ok", "Conta criada! Confira seu e-mail para confirmar o cadastro e depois entre na aba \"Entrar\".");
-        document.getElementById("pane-signup").reset();
       });
     });
 
