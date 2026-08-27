@@ -27,6 +27,18 @@
       return;
     }
 
+    // com um único mês não há "evolução" pra desenhar (a linha viraria um ponto
+    // solto no meio de eixos meio aleatórios) — mostra o valor em destaque em vez disso.
+    if (cfg.values.length === 1) {
+      var only = cfg.values[0];
+      var onlyColor = only < 0 ? "var(--warm)" : "var(--accent-ink)";
+      host.innerHTML = '<div style="min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:16px 0">' +
+        '<span style="font-family:var(--ff-mono);font-weight:700;font-size:clamp(24px,4vw,32px);color:' + onlyColor + '">' + esc(Format.money(only)) + '</span>' +
+        '<span style="font-size:13px;color:var(--muted);max-width:34ch">Esse é o seu primeiro mês registrado. A partir do próximo, o gráfico mostra a evolução aqui.</span>' +
+        '</div>';
+      return;
+    }
+
     // o viewBox usa a largura real do contêiner (não um valor fixo) para que o
     // texto do SVG renderize no tamanho real em px, e não fique minúsculo em telas estreitas.
     var CW = Math.max(240, Math.round(host.getBoundingClientRect().width) || 720);

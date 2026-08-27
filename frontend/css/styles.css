@@ -213,13 +213,13 @@ input{font:inherit}
 
 /* ---------- Hero stats (planilha) ---------- */
 .herostats{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:14px;margin-top:26px}
-.herostat{padding:20px 22px}
+.herostat{padding:20px 22px;display:flex;flex-direction:column}
 .herostat__icon{font-size:22px;display:block;margin-bottom:2px}
 .herostat__label{font-family:var(--ff-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .herostat__value{font-family:var(--ff-mono);font-weight:600;font-size:clamp(24px,3.4vw,34px);letter-spacing:-.02em;margin-top:8px;color:var(--accent-ink);font-variant-numeric:tabular-nums;word-break:break-word}
 .herostat--big .herostat__value{font-size:clamp(30px,4.6vw,46px)}
 .herostat--negative .herostat__value{color:var(--warm)}
-.herostat__caption{margin-top:8px;font-size:13px;color:var(--muted)}
+.herostat__caption{margin-top:auto;padding-top:8px;font-size:13px;color:var(--muted)}
 
 /* ---------- Chart ---------- */
 .chart{margin-top:14px;position:relative}

@@ -49,12 +49,15 @@
       return;
     }
 
-    document.getElementById("userbox-email").textContent = session.user.email;
+    var metaName = session.user.user_metadata && session.user.user_metadata.full_name;
+    document.getElementById("userbox-email").textContent = metaName || session.user.email;
     document.getElementById("userbox").hidden = false;
 
     db.from("profiles").select("*").eq("id", session.user.id).single().then(function (res) {
       var profile = res.data;
-      document.getElementById("userbox-email").textContent = (profile && profile.full_name) || session.user.email;
+      if (!metaName && profile && profile.full_name) {
+        document.getElementById("userbox-email").textContent = profile.full_name;
+      }
       if (!profile || !profile.onboarding_completed) {
         showView("onboarding");
         window.OnboardingView.show(session.user, profile, function () { route(session); });
