@@ -214,9 +214,20 @@
       return MES_ABREV[parseInt(m.split("-")[1], 10) - 1] + (withYear ? "/" + String(Fi.yearOf(m)).slice(2) : "");
     });
     var values = realMonths.map(function (m) { return computed.cumulative[m]; });
+    var single = null;
+    if (realMonths.length === 1) {
+      var m0 = realMonths[0];
+      single = {
+        income: computed.income[m0].amount,
+        expenses: computed.totalExpenses[m0],
+        balance: computed.balance[m0],
+        label: Format.capitalize(Fi.monthLabel(m0)) + " de " + Fi.yearOf(m0)
+      };
+    }
     global.SheetChart.draw(document.getElementById("sheet-chart"), {
       labels: labels,
       values: values,
+      single: single,
       tooltip: function (k) {
         var m = realMonths[k];
         return '<div class="tip__time">' + Format.capitalize(Fi.monthLabel(m)) + " de " + Fi.yearOf(m) + '</div>' +
@@ -249,18 +260,20 @@
 
   function render() {
     computed = Fi.computeSheet(months, categories, profile.monthly_income, incomeByMonth, expensesByMonth);
+    var todayKey = Fi.todayKey();
 
     // ---- cabeçalho ----
     var thead = '<tr><th class="sheet__corner">&nbsp;</th>';
     months.forEach(function (m, col) {
       var isFirst = col === 0;
       var isLast = col === months.length - 1;
+      var isToday = m === todayKey;
       var removable = months.length > 1 && (isFirst || (isLast && manualExtra.indexOf(m) > -1));
       var removeBtn = removable
         ? '<button type="button" class="sheet__monthremove" data-month-remove="' + col + '" aria-label="Remover ' + Format.esc(Fi.monthLabel(m)) + '">&times;</button>'
         : "";
-      thead += '<th class="sheet__monthhead">' + removeBtn + '<span class="sheet__monthname">' + Format.capitalize(Fi.monthLabel(m)) + '</span>' +
-        '<span class="sheet__monthyear">' + Fi.yearOf(m) + '</span></th>';
+      thead += '<th class="sheet__monthhead' + (isToday ? ' is-today' : '') + '">' + removeBtn + '<span class="sheet__monthname">' + Format.capitalize(Fi.monthLabel(m)) + '</span>' +
+        '<span class="sheet__monthyear">' + Fi.yearOf(m) + '</span>' + (isToday ? '<span class="sheet__monthbadge">atual</span>' : '') + '</th>';
     });
     thead += "</tr>";
     document.getElementById("sheet-thead").innerHTML = thead;
@@ -283,8 +296,9 @@
       body += "</tr>";
     });
 
-    body += '<tr class="row--addcat"><td class="sheet__rowhead sheet__rowhead--editable">' +
-      '<input type="text" class="rowname rowname--ghost" id="sheet-newcat" placeholder="+ Adicionar gasto"></td>' +
+    body += '<tr class="row--addcat" id="sheet-addcat-row"><td class="sheet__rowhead sheet__rowhead--editable">' +
+      '<span class="rowname__plus" aria-hidden="true">+</span>' +
+      '<input type="text" class="rowname rowname--ghost" id="sheet-newcat" placeholder="Adicionar gasto"></td>' +
       '<td class="cell--ghost" colspan="' + months.length + '"></td></tr>';
 
     body += '<tr class="row--total"><td class="sheet__rowhead">Total gastos</td>';
@@ -373,6 +387,13 @@
         var name = newcat.value.trim();
         if (!name) return;
         addCategory(name);
+      });
+    }
+    var addRow = document.getElementById("sheet-addcat-row");
+    if (addRow) {
+      addRow.addEventListener("click", function (e) {
+        if (e.target && e.target.id === "sheet-newcat") return;
+        if (newcat) newcat.focus();
       });
     }
   }

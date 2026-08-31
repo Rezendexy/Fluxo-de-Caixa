@@ -21,21 +21,52 @@
    *   tooltip: function(index) -> html
    * }
    */
+  function bar(label, value, pct, kind) {
+    return '<div class="chart-bar">' +
+      '<div class="chart-bar__row"><span class="chart-bar__label">' + label + '</span>' +
+      '<span class="chart-bar__value">' + esc(Format.money(value)) + '</span></div>' +
+      '<div class="chart-bar__track"><div class="chart-bar__fill chart-bar__fill--' + kind + '" style="width:' + pct + '%"></div></div>' +
+      '</div>';
+  }
+
+  // sem dado nenhum ainda: mostra a forma do gráfico (barras) já explicando o
+  // que vai aparecer ali, em vez de deixar um vazio sem sentido pro aluno.
+  function emptyState() {
+    return '<div class="chart-intro">' +
+      '<p class="chart-intro__hint">O gráfico aparece assim que você registrar a receita e os gastos de pelo menos um mês — ele compara os dois e mostra quanto sobrou.</p>' +
+      '<div class="chart-bars chart-bars--skeleton">' +
+      '<div class="chart-bar"><div class="chart-bar__row"><span class="chart-bar__label">Receita</span></div>' +
+      '<div class="chart-bar__track"><div class="chart-bar__fill chart-bar__fill--skeleton" style="width:62%"></div></div></div>' +
+      '<div class="chart-bar"><div class="chart-bar__row"><span class="chart-bar__label">Gastos</span></div>' +
+      '<div class="chart-bar__track"><div class="chart-bar__fill chart-bar__fill--skeleton" style="width:34%"></div></div></div>' +
+      '</div></div>';
+  }
+
+  // com um único mês não há "evolução" pra desenhar (a linha viraria um ponto
+  // solto no meio de eixos meio aleatórios) — mostra receita x gastos daquele
+  // mês em barras, que é uma comparação que já faz sentido com um mês só.
+  function singleMonthChart(s) {
+    var max = Math.max(s.income, s.expenses, 1);
+    var incomePct = Math.max(4, Math.round((s.income / max) * 100));
+    var expensePct = Math.max(4, Math.round((s.expenses / max) * 100));
+    var positive = s.balance >= 0;
+    return '<div class="chart-intro">' +
+      '<p class="chart-intro__hint">' + esc(s.label) + ' é o seu primeiro mês registrado. Assim que o próximo mês fechar, o gráfico passa a mostrar a evolução do saldo acumulado.</p>' +
+      '<div class="chart-bars">' + bar("Receita", s.income, incomePct, "income") + bar("Gastos", s.expenses, expensePct, "expense") + '</div>' +
+      '<div class="chart-balance ' + (positive ? "is-positive" : "is-negative") + '">' +
+      '<span class="chart-balance__label">Saldo do mês</span>' +
+      '<span class="chart-balance__value">' + esc(Format.money(s.balance)) + '</span>' +
+      '</div></div>';
+  }
+
   function draw(host, cfg) {
     if (!cfg || !cfg.values.length) {
-      host.innerHTML = '<div style="height:120px;display:grid;place-items:center;color:var(--muted);font-size:13px">O gráfico aparece assim que houver dados de pelo menos um mês.</div>';
+      host.innerHTML = emptyState();
       return;
     }
 
-    // com um único mês não há "evolução" pra desenhar (a linha viraria um ponto
-    // solto no meio de eixos meio aleatórios) — mostra o valor em destaque em vez disso.
-    if (cfg.values.length === 1) {
-      var only = cfg.values[0];
-      var onlyColor = only < 0 ? "var(--warm)" : "var(--accent-ink)";
-      host.innerHTML = '<div style="min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:16px 0">' +
-        '<span style="font-family:var(--ff-mono);font-weight:700;font-size:clamp(24px,4vw,32px);color:' + onlyColor + '">' + esc(Format.money(only)) + '</span>' +
-        '<span style="font-size:13px;color:var(--muted);max-width:34ch">Esse é o seu primeiro mês registrado. A partir do próximo, o gráfico mostra a evolução aqui.</span>' +
-        '</div>';
+    if (cfg.values.length === 1 && cfg.single) {
+      host.innerHTML = singleMonthChart(cfg.single);
       return;
     }
 
