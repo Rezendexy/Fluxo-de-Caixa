@@ -122,14 +122,22 @@
     });
   }
   function deleteCategory(catId) {
-    if (!global.confirm("Remover este gasto e todo o histórico dele? Essa ação não pode ser desfeita.")) return;
-    setHint("Removendo…");
-    global.DB.client.from("categories").delete().eq("id", catId).then(function (res) {
-      if (res.error) { setHint("Não foi possível remover.", true); return; }
-      categories = categories.filter(function (c) { return c.id !== catId; });
-      Object.keys(expensesByMonth).forEach(function (m) { delete expensesByMonth[m][catId]; });
-      setHint("Tudo salvo.");
-      render();
+    var cat = categories.filter(function (c) { return c.id === catId; })[0];
+    global.Dialog.confirm({
+      title: "Remover gasto",
+      message: 'Remover "' + (cat ? cat.name : "este gasto") + '" e todo o histórico dele? Essa ação não pode ser desfeita.',
+      confirmLabel: "Remover",
+      danger: true
+    }).then(function (ok) {
+      if (!ok) return;
+      setHint("Removendo…");
+      global.DB.client.from("categories").delete().eq("id", catId).then(function (res) {
+        if (res.error) { setHint("Não foi possível remover.", true); return; }
+        categories = categories.filter(function (c) { return c.id !== catId; });
+        Object.keys(expensesByMonth).forEach(function (m) { delete expensesByMonth[m][catId]; });
+        setHint("Tudo salvo.");
+        render();
+      });
     });
   }
 
@@ -149,20 +157,27 @@
   function removeFirstMonth() {
     if (months.length <= 1) return;
     var monthKey = months[0];
-    if (!global.confirm("Remover " + Fi.monthLabel(monthKey) + " de " + Fi.yearOf(monthKey) + " da planilha? Os lançamentos desse mês serão apagados.")) return;
-    setHint("Removendo…");
-    var nextStart = months[1];
-    deleteMonthEntries(monthKey).then(function (hadError) {
-      if (hadError) { setHint("Não foi possível remover.", true); return; }
-      global.DB.client.from("profiles").update({ start_month: nextStart }).eq("id", user.id).then(function (res) {
-        if (res.error) { setHint("Não foi possível salvar.", true); return; }
-        profile.start_month = nextStart;
-        delete incomeByMonth[monthKey];
-        delete expensesByMonth[monthKey];
-        manualExtra = manualExtra.filter(function (m) { return m !== monthKey; });
-        recomputeMonths();
-        setHint("Tudo salvo.");
-        render();
+    global.Dialog.confirm({
+      title: "Remover mês",
+      message: "Remover " + Fi.monthLabel(monthKey) + " de " + Fi.yearOf(monthKey) + " da planilha? Os lançamentos desse mês serão apagados.",
+      confirmLabel: "Remover",
+      danger: true
+    }).then(function (ok) {
+      if (!ok) return;
+      setHint("Removendo…");
+      var nextStart = months[1];
+      deleteMonthEntries(monthKey).then(function (hadError) {
+        if (hadError) { setHint("Não foi possível remover.", true); return; }
+        global.DB.client.from("profiles").update({ start_month: nextStart }).eq("id", user.id).then(function (res) {
+          if (res.error) { setHint("Não foi possível salvar.", true); return; }
+          profile.start_month = nextStart;
+          delete incomeByMonth[monthKey];
+          delete expensesByMonth[monthKey];
+          manualExtra = manualExtra.filter(function (m) { return m !== monthKey; });
+          recomputeMonths();
+          setHint("Tudo salvo.");
+          render();
+        });
       });
     });
   }
@@ -170,16 +185,23 @@
     if (months.length <= 1) return;
     var monthKey = months[months.length - 1];
     if (manualExtra.indexOf(monthKey) === -1) return; // o mês atual de verdade não pode ser removido
-    if (!global.confirm("Remover " + Fi.monthLabel(monthKey) + " de " + Fi.yearOf(monthKey) + " da planilha?")) return;
-    setHint("Removendo…");
-    deleteMonthEntries(monthKey).then(function (hadError) {
-      if (hadError) { setHint("Não foi possível remover.", true); return; }
-      delete incomeByMonth[monthKey];
-      delete expensesByMonth[monthKey];
-      manualExtra = manualExtra.filter(function (m) { return m !== monthKey; });
-      recomputeMonths();
-      setHint("Tudo salvo.");
-      render();
+    global.Dialog.confirm({
+      title: "Remover mês",
+      message: "Remover " + Fi.monthLabel(monthKey) + " de " + Fi.yearOf(monthKey) + " da planilha?",
+      confirmLabel: "Remover",
+      danger: true
+    }).then(function (ok) {
+      if (!ok) return;
+      setHint("Removendo…");
+      deleteMonthEntries(monthKey).then(function (hadError) {
+        if (hadError) { setHint("Não foi possível remover.", true); return; }
+        delete incomeByMonth[monthKey];
+        delete expensesByMonth[monthKey];
+        manualExtra = manualExtra.filter(function (m) { return m !== monthKey; });
+        recomputeMonths();
+        setHint("Tudo salvo.");
+        render();
+      });
     });
   }
 
@@ -270,7 +292,7 @@
       var isToday = m === todayKey;
       var removable = months.length > 1 && (isFirst || (isLast && manualExtra.indexOf(m) > -1));
       var removeBtn = removable
-        ? '<button type="button" class="sheet__monthremove" data-month-remove="' + col + '" aria-label="Remover ' + Format.esc(Fi.monthLabel(m)) + '">&times;</button>'
+        ? '<button type="button" class="sheet__monthremove" data-month-remove="' + col + '" aria-label="Remover ' + Format.esc(Fi.monthLabel(m)) + '" title="Remover ' + Format.esc(Fi.monthLabel(m)) + '">&times;</button>'
         : "";
       thead += '<th class="sheet__monthhead' + (isToday ? ' is-today' : '') + '">' + removeBtn + '<span class="sheet__monthname">' + Format.capitalize(Fi.monthLabel(m)) + '</span>' +
         '<span class="sheet__monthyear">' + Fi.yearOf(m) + '</span>' + (isToday ? '<span class="sheet__monthbadge">atual</span>' : '') + '</th>';

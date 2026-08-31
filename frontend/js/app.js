@@ -10,6 +10,11 @@
 
   /* ============ tema ============ */
   var root = document.documentElement;
+  var metaTheme = document.getElementById("meta-theme-color");
+  function syncThemeColor() {
+    if (!metaTheme) return;
+    metaTheme.setAttribute("content", root.getAttribute("data-theme") === "dark" ? "#171435" : "#F7F7FA");
+  }
   var stored = null;
   try { stored = localStorage.getItem("tema"); } catch (err) { stored = null; }
   if (stored === "dark" || stored === "light") {
@@ -17,9 +22,11 @@
   } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
     root.setAttribute("data-theme", "dark");
   }
+  syncThemeColor();
   document.getElementById("tema").addEventListener("click", function () {
     var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
     root.setAttribute("data-theme", next);
+    syncThemeColor();
     try { localStorage.setItem("tema", next); } catch (err) {}
   });
 
