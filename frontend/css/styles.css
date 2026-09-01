@@ -225,7 +225,7 @@ input{font:inherit}
 .ob-period-preview{margin-top:10px;font-size:13px;color:var(--ink-soft);line-height:1.5}
 
 /* ---------- Hero stats (planilha) ---------- */
-.herostats{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:14px;margin-top:26px}
+.herostats{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:26px}
 .herostat{padding:22px 22px 20px;display:flex;flex-direction:column}
 .herostat__label{font-family:var(--ff-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .herostat__value{font-family:var(--ff-mono);font-weight:600;font-size:clamp(22px,3.2vw,32px);letter-spacing:-.02em;margin-top:10px;color:var(--accent-ink);font-variant-numeric:tabular-nums;line-height:1.1;word-break:break-word}
@@ -263,19 +263,21 @@ input{font:inherit}
 .chart-balance.is-negative .chart-balance__value{color:var(--warm)}
 
 /* ---------- Planilha ---------- */
-/* Um mês por LINHA e um gasto por COLUNA (em vez do contrário). No celular
-   isso vira rolagem vertical natural mês a mês; a rolagem lateral (dentro de
-   um contêiner com altura própria, não a página) só entra em jogo se houver
-   muitos gastos cadastrados. Nada aqui usa posicionamento absoluto sobre
-   texto — cabeçalhos e células usam flexbox, então nunca há sobreposição,
-   só quebra de linha/rolagem quando o conteúdo não cabe. */
+/* Um GASTO por LINHA e um MÊS por COLUNA. Dá pra comparar o mesmo gasto ao
+   longo dos meses lendo a linha inteira, ou ver a "foto" de um mês inteiro
+   lendo a coluna — igual a uma planilha de verdade. A rolagem lateral
+   (dentro de um contêiner com altura própria, não a página) entra em jogo
+   com muitos meses; a vertical, com muitos gastos cadastrados. Nada aqui
+   usa posicionamento absoluto sobre texto — cabeçalhos e células usam
+   flexbox, então nunca há sobreposição, só quebra de linha/rolagem quando
+   o conteúdo não cabe. */
 .sheetcard{margin-top:18px;padding:20px 22px 22px}
 .sheetcard__head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
 .sheet-savehint{min-height:18px;font-size:12px;color:var(--muted);margin-top:2px}
 .sheet-savehint.is-error{color:var(--danger)}
 .sheet-scroll{overflow:auto;margin-top:16px;border:1px solid var(--line);border-radius:var(--radius);-webkit-overflow-scrolling:touch;box-shadow:var(--shadow-sm);max-height:min(64vh,640px)}
 /* barra de rolagem fina e discreta em vez da barra padrão grossa do
-   navegador, tanto no eixo vertical (meses) quanto horizontal (gastos). */
+   navegador, tanto no eixo vertical (gastos) quanto horizontal (meses). */
 .sheet-scroll{scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
 .sheet-scroll::-webkit-scrollbar{width:9px;height:9px}
 .sheet-scroll::-webkit-scrollbar-track{background:transparent}
@@ -285,52 +287,19 @@ input{font:inherit}
 .sheet-scrollhint{display:none;text-align:center;font-size:11.5px;color:var(--muted);margin-top:8px}
 .sheet-scrollhint.is-on{display:block}
 /* sem width:100% de propósito — uma tabela sem largura fixa encolhe pro
-   tamanho do conteúdo (poucos gastos = tabela estreita, sem esticar colunas
+   tamanho do conteúdo (poucos meses = tabela estreita, sem esticar colunas
    à toa) e só cresce além do contêiner (ativando a rolagem) quando o
    conteúdo realmente precisa. */
 .sheet{border-collapse:separate;border-spacing:0}
 .sheet th,.sheet td{border-bottom:1px solid var(--line);white-space:nowrap}
 .sheet thead th{background:var(--surface-2);border-bottom:1px solid var(--line-strong)}
 .sheet thead th:not(.sheet__corner){position:sticky;top:0;z-index:3}
-.sheet__corner{position:sticky;top:0;left:0;z-index:4;min-width:100px;background:var(--surface-2);border-right:1px solid var(--line);text-align:left;padding:12px 14px;font-family:var(--ff-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.sheet__colhead,.sheet__cell,.sheet__computed{border-left:1px solid var(--line)}
-/* mesmo tamanho/peso do .colhead__name (que é travado em 16px pelo motivo
-   do zoom no iOS) — assim "Receita"/"Total gastos"/"Saldo" não ficam menores
-   que os nomes de gasto editáveis ao lado, tudo no mesmo cabeçalho. */
-.sheet__colhead{padding:13px 14px;text-align:right;font-family:var(--ff-display);font-weight:600;font-size:16px}
-.sheet__colhead--cat,.sheet__colhead--add{padding:0;text-align:left}
-.sheet__colhead--add{max-width:168px}
-.sheet__colhead--income,.sheet__cell--income{background:var(--accent-soft)!important}
+.sheet__corner{position:sticky;top:0;left:0;z-index:4;min-width:120px;background:var(--surface-2);border-right:1px solid var(--line);text-align:left;padding:12px 14px;font-family:var(--ff-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.sheet__monthhead,.sheet__cell,.sheet__computed{border-left:1px solid var(--line)}
+.sheet__monthhead{padding:0;min-width:118px}
 
-/* cabeçalho de uma coluna de gasto: nome editável + remover, lado a lado em
-   flex — nunca um em cima do outro, o remover só empurra o nome. */
-.colhead{display:flex;align-items:center;gap:2px;padding:6px 6px 6px 12px;min-height:46px}
-/* sem width fixo aqui: o JS mede o texto de cada nome (e de cada valor da
-   coluna) e aplica a largura exata via style="width" — a coluna nasce
-   pequena e só cresce se algum mês precisar, tipo autoajuste do Excel.
-   flex:none (não flex:1): "flex:1" define flex-basis:0%, que ignora o
-   width inline e faz o campo depender só do espaço sobrando — flex:none
-   respeita o width calculado exatamente. */
-.colhead__name{flex:none;min-width:0;border:0;background:transparent;padding:8px 4px;font-size:16px;font-family:var(--ff-display);font-weight:600;color:var(--ink);text-align:right;overflow:hidden;text-overflow:ellipsis}
-.colhead__name:focus{outline:none;background:var(--surface)}
-.colhead__remove{flex:none;width:24px;height:24px;border:0;background:transparent;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;opacity:.55;border-radius:6px;transition:opacity .15s,color .15s,background .15s}
-.colhead__remove:hover{opacity:1;color:var(--danger);background:var(--surface)}
-.colhead--ghost{cursor:pointer}
-.sheet__colhead--add:hover{background:var(--accent-soft)}
-.colhead__plus{flex:none;width:18px;height:18px;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1;display:grid;place-items:center;pointer-events:none}
-.colhead__name--ghost{text-align:left;color:var(--accent-ink);font-weight:500}
-/* etapa 2 do "+ adicionar gasto": some até o nome ser confirmado, depois
-   aparece embaixo pedindo o valor mensal padrão daquele gasto. */
-.newvalue{display:flex;align-items:center;gap:5px;padding:0 10px 8px 12px;border-top:1px solid var(--line)}
-.newvalue__affix{font-family:var(--ff-mono);font-size:11.5px;color:var(--muted);flex:none;margin-top:7px}
-.newvalue__input{flex:1;min-width:0;border:0;background:transparent;padding:7px 0;font-family:var(--ff-mono);font-size:16px;font-weight:500;color:var(--ink)}
-.newvalue__input:focus{outline:none}
-.newvalue__input::placeholder{color:var(--accent-ink);opacity:.7}
-
-/* célula do mês (coluna fixa à esquerda): nome do mês + badge à esquerda,
-   botão de remover à direita, sempre via flex — largura própria cresce se
-   precisar, mas os dois lados nunca se encostam. */
-.sheet__monthcell{position:sticky;left:0;z-index:2;background:var(--surface);border-right:1px solid var(--line);padding:0;min-width:100px;transition:background .15s}
+/* cabeçalho de uma coluna de mês: nome/ano de um lado, remover do outro,
+   sempre via flex — nunca um em cima do outro. */
 .monthcell{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:11px 10px 11px 14px;min-height:46px}
 .monthcell__text{display:flex;flex-direction:column;gap:1px;min-width:0}
 .monthcell__name{font-family:var(--ff-display);font-weight:700;font-size:14px;letter-spacing:-.01em}
@@ -339,8 +308,38 @@ input{font:inherit}
 .monthcell__remove{flex:none;width:22px;height:22px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:14px;line-height:1;cursor:pointer;opacity:.55;border-radius:6px;display:grid;place-items:center;transition:opacity .15s,color .15s,border-color .15s}
 .monthcell__remove:hover,.monthcell__remove:focus-visible{opacity:1;color:var(--danger);border-color:var(--danger)}
 
+/* célula do gasto (coluna fixa à esquerda): nome editável + remover, ou um
+   rótulo fixo (Receita / Total gastos / Saldo). mesmo tamanho/peso do
+   .rowhead__name (travado em 16px pelo motivo do zoom no iOS) — assim os
+   rótulos fixos não ficam menores que os nomes de gasto editáveis ao lado. */
+.sheet__rowhead{position:sticky;left:0;z-index:2;background:var(--surface);border-right:1px solid var(--line);padding:0;min-width:132px;transition:background .15s}
+.sheet__rowhead--label{padding:13px 14px;font-family:var(--ff-display);font-weight:600;font-size:15px;white-space:normal}
+.sheet__rowhead--computed{font-weight:700}
+.rowhead{display:flex;align-items:center;gap:2px;padding:6px 6px 6px 12px;min-height:46px}
+/* sem width fixo aqui: o JS mede o texto do maior nome de gasto e aplica a
+   largura exata via style="width" — a coluna nasce pequena e só cresce se
+   precisar, tipo autoajuste do Excel. */
+.rowhead__name{flex:1;min-width:0;border:0;background:transparent;padding:8px 4px;font-size:16px;font-family:var(--ff-display);font-weight:600;color:var(--ink);text-align:left;overflow:hidden;text-overflow:ellipsis}
+.rowhead__name:focus{outline:none;background:var(--surface)}
+.rowhead__remove{flex:none;width:24px;height:24px;border:0;background:transparent;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;opacity:.55;border-radius:6px;transition:opacity .15s,color .15s,background .15s}
+.rowhead__remove:hover{opacity:1;color:var(--danger);background:var(--surface)}
+.rowhead--ghost{cursor:pointer}
+.sheet__rowhead--add:hover{background:var(--accent-soft)}
+.rowhead__plus{flex:none;width:18px;height:18px;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1;display:grid;place-items:center;pointer-events:none}
+.rowhead__name--ghost{color:var(--accent-ink);font-weight:500}
+/* etapa 2 do "+ adicionar gasto": some até o nome ser confirmado, depois
+   aparece embaixo pedindo o valor mensal padrão daquele gasto. */
+.newvalue{display:flex;align-items:center;gap:5px;padding:0 10px 8px 12px;border-top:1px solid var(--line)}
+.newvalue__affix{font-family:var(--ff-mono);font-size:11.5px;color:var(--muted);flex:none;margin-top:7px}
+.newvalue__input{flex:1;min-width:0;border:0;background:transparent;padding:7px 0;font-family:var(--ff-mono);font-size:16px;font-weight:500;color:var(--ink)}
+.newvalue__input:focus{outline:none}
+.newvalue__input::placeholder{color:var(--accent-ink);opacity:.7}
+
 .sheet tbody tr:nth-child(even) > td{background:var(--surface-2)}
-.sheet tbody tr.is-today > td{background:color-mix(in srgb,var(--accent) 14%,var(--surface-2))}
+/* "hoje" agora é uma COLUNA (um mês), não uma linha inteira — cada célula
+   daquele mês recebe a classe individualmente, em vez de marcar a <tr>. */
+.sheet td.is-today{background:color-mix(in srgb,var(--accent) 14%,var(--surface-2))!important}
+.sheet th.is-today{background:color-mix(in srgb,var(--accent) 14%,var(--surface-2))!important}
 
 .sheet__cell{padding:0;text-align:right}
 .cellbox{display:flex;align-items:center;justify-content:flex-end;gap:4px;padding:0 12px;height:100%;min-height:46px}
@@ -348,22 +347,111 @@ input{font:inherit}
 /* 16px (nunca menos): abaixo disso o iOS Safari dá zoom automático ao
    focar o campo, e é esse zoom que bagunçava tudo — o layout ficava certo,
    só que a tela inteira saltava de tamanho e as colunas fixas desalinhavam.
-   Sem width fixo: o JS calcula, por coluna, a largura do maior valor
-   daquele gasto (em todos os meses) e aplica via style="width" — a coluna
-   nasce pequena (mín. 6 dígitos) e só cresce se algum mês precisar. */
+   Sem width fixo: o JS calcula a largura do maior valor lançado (em
+   qualquer gasto/mês) e aplica via style="width" — a coluna nasce pequena
+   (mín. 6 dígitos) e só cresce se algum valor precisar. */
 .cellbox__input{width:6ch;min-width:0;border:0;background:transparent;padding:12px 0;font-family:var(--ff-mono);font-size:16px;font-weight:500;color:var(--ink);text-align:right}
 .cellbox__input:focus{outline:none}
-/* o valor padrão (estimativa) aparece como placeholder do input, mas deve
-   ler igual a um valor já lançado — mesma cor, sem esmaecer. */
+/* o valor padrão (estimativa/projeção) aparece como placeholder do input,
+   mas deve ler igual a um valor já lançado — mesma cor, sem esmaecer. */
 .cellbox__input::placeholder{color:var(--ink);opacity:1}
 .cellbox:focus-within{background:var(--accent-soft);box-shadow:inset 0 0 0 1.5px var(--focus)}
-/* célula vazia da coluna "+ adicionar gasto": precisa da mesma borda das
-   outras células, senão ela some visualmente e parece grudada na coluna
+/* célula vazia da linha "+ adicionar gasto": precisa da mesma borda das
+   outras células, senão ela some visualmente e parece grudada na linha
    de gasto anterior. */
 .cell--ghost{background:var(--surface);border-left:1px solid var(--line)}
+/* a linha inteira da Receita fica com um tom esverdeado — igual peso pro
+   rótulo fixo e pra cada célula de valor. Empatado em especificidade com
+   ".is-today" (mesma combinação classe+classe+tipo) e declarado depois no
+   arquivo, então continua vencendo mesmo na coluna do mês atual. */
+.sheet__rowhead--income{background:var(--accent-soft)!important}
+.sheet td.sheet__cell--income{background:var(--accent-soft)!important}
 .sheet__computed{padding:13px 14px;text-align:right;font-family:var(--ff-mono);font-size:14px;font-variant-numeric:tabular-nums}
 .sheet__computed span.is-negative{color:var(--warm)}
 .sheet__computed span.is-positive{color:var(--accent-ink)}
+
+/* separador mais forte entre os grupos de linha (receita / gastos / totais)
+   — mesma linha (var(--line-strong)) já usada no cabeçalho da tabela e na
+   planilha realizada, pra marcar a "seção" de cada linha rápido. */
+.sheet__row--income > td{border-bottom:1px solid var(--line-strong)}
+.sheet__row--totalstart > td{border-top:1px solid var(--line-strong)}
+
+/* ---------- Abas Projeção / Realizada ---------- */
+.sheet-tabs{border-top:0;padding-top:0;margin:0 0 18px;gap:14px}
+
+/* ---------- Seletor de mês (dropdown próprio — um <select> nativo não dá
+   pra estilizar por dentro, a lista aberta sempre usa o visual do
+   navegador; isto aqui é 100% nosso, aberto e fechado) ---------- */
+.monthpicker{position:relative}
+.monthpicker__trigger{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;border:1px solid var(--line-strong);background:var(--surface-2);border-radius:11px;padding:13px 14px;font-family:var(--ff-body);font-size:16px;font-weight:500;color:var(--ink);cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.monthpicker__trigger:hover{border-color:var(--muted)}
+.monthpicker__trigger:focus-visible,.monthpicker__trigger[aria-expanded="true"]{outline:none;border-color:var(--focus);box-shadow:0 0 0 3px var(--accent-soft)}
+.monthpicker__value{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.monthpicker__chevron{width:15px;height:15px;flex:none;stroke:var(--muted);transition:transform .2s}
+.monthpicker__trigger[aria-expanded="true"] .monthpicker__chevron{transform:rotate(180deg)}
+.monthpicker__menu{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:12;max-height:280px;overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:6px;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+.monthpicker__option{display:block;width:100%;text-align:left;border:0;background:transparent;border-radius:9px;padding:10px 12px;font-family:var(--ff-body);font-size:14.5px;color:var(--ink);cursor:pointer}
+.monthpicker__option:hover,.monthpicker__option:focus-visible{background:var(--surface-2);outline:none}
+.monthpicker__option.is-selected{background:var(--accent);color:var(--accent-contrast);font-weight:600}
+
+/* ---------- Planilha realizada (mês selecionado: projetado x realizado) ---------- */
+.realizedcard{margin-top:18px;padding:20px 22px 22px}
+.realizedcard__head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.realizedcard__monthfield{min-width:200px}
+.realized-block__hint{display:block;text-transform:none;margin-top:2px;font-family:var(--ff-body);font-weight:400;font-size:11px;letter-spacing:normal;color:var(--muted)}
+
+/* uma única planilha com 4 colunas (gasto / projetado / realizado / diferença)
+   em vez de duas mini-tabelas empilhadas — assim dá pra comparar linha a
+   linha sem subir e descer a página. É a MESMA tabela ".sheet" da planilha
+   de projeção — leva a classe "sheet" e reaproveita direto as classes
+   sheet__corner/sheet__rowhead/sheet__computed/sheet__cell/sheet__row--*,
+   então nasce com a mesma fonte, o mesmo zebra e as mesmas linhas de
+   divisão da planilha de projeção sem duplicar nada; ".realizedgrid" só
+   acrescenta o que é exclusivo desta tabela (cabeçalho das colunas de
+   valor e o tom verde/vermelho de célula editada). Rolagem horizontal
+   própria, pro "Gasto" continuar fixo à esquerda em telas estreitas,
+   igual à planilha de projeção. */
+.realized-scroll{overflow:auto;margin-top:16px;border:1px solid var(--line);border-radius:var(--radius);-webkit-overflow-scrolling:touch;box-shadow:var(--shadow-sm)}
+.realized-scroll{scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+.realized-scroll::-webkit-scrollbar{height:9px}
+.realized-scroll::-webkit-scrollbar-track{background:transparent}
+.realized-scroll::-webkit-scrollbar-thumb{background-color:var(--line-strong);border-radius:999px;border:2px solid var(--surface);background-clip:padding-box}
+.realized-scroll::-webkit-scrollbar-thumb:hover{background-color:var(--muted)}
+/* cabeçalho das 3 colunas de valor: mesma tipografia do canto "Gasto"
+   (.sheet__corner — mono, maiúsculo, discreto), só que alinhada à direita
+   e sem grudar na esquerda. Posição sticky, fundo e borda de baixo já vêm
+   de graça de ".sheet thead th" / ".sheet thead th:not(.sheet__corner)". */
+.realizedgrid thead th:not(.sheet__corner){text-align:right;padding:12px 14px;font-family:var(--ff-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.realizedgrid__diff-empty{color:var(--muted)}
+/* sem edição ainda: célula neutra, mostra o projetado como sugestão cinza
+   (igual à planilha de projeção). Editada, fica verde ("is-good": gastou
+   menos que o projetado, ou recebeu mais receita do que o projetado) ou
+   vermelha ("is-bad": o oposto) — cor de verdade (--danger/--accent-ink),
+   não o laranja/verde-água usado no resto do app, pra ficar bem explícito.
+   a mesma cor é usada no texto da coluna "Diferença", pra cada linha —
+   por isso ".is-good"/".is-bad" aqui, em vez de reaproveitar o
+   ".is-positive"/".is-negative" (esses continuam só pra saldo, que já usa
+   a cor padrão --warm/--accent-ink igual à planilha de projeção). */
+.realizedgrid .cellbox.is-good{background:var(--accent-soft)}
+.realizedgrid .cellbox.is-good .cellbox__input{color:var(--accent-ink)}
+.realizedgrid .cellbox.is-bad{background:color-mix(in srgb,var(--danger) 16%,var(--surface-2))}
+.realizedgrid .cellbox.is-bad .cellbox__input{color:var(--danger)}
+.realizedgrid .sheet__computed .is-good{color:var(--accent-ink)}
+.realizedgrid .sheet__computed .is-bad{color:var(--danger)}
+.realized-empty{padding:20px 14px;text-align:center;color:var(--muted);font-size:14px;white-space:normal}
+
+/* ---------- Diferença: projetado x realizado (mesmo espírito do "saldo
+   acumulado" da projeção, só que comparando os dois) ---------- */
+.diffcard{margin-top:18px;padding:20px 22px 22px}
+.diffcard__head{margin-bottom:14px}
+.diffstrip{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--line)}
+.diffstrip__cell{background:var(--surface);padding:16px;text-align:center}
+.diffstrip__label{font-family:var(--ff-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.diffstrip__value{font-family:var(--ff-mono);font-weight:700;font-size:20px;margin-top:6px;font-variant-numeric:tabular-nums}
+.diffstrip__cell--diff.is-positive{background:var(--accent-soft)}
+.diffstrip__cell--diff.is-positive .diffstrip__value{color:var(--accent-ink)}
+.diffstrip__cell--diff.is-negative{background:color-mix(in srgb,var(--danger) 14%,var(--surface-2))}
+.diffstrip__cell--diff.is-negative .diffstrip__value{color:var(--danger)}
 
 /* ---------- Saldo acumulado (tira só leitura, mês em coluna) ---------- */
 .cumcard{margin-top:18px;padding:20px 22px 22px}
@@ -419,13 +507,20 @@ footer{margin-top:46px;border-top:1px solid var(--line);padding:22px 0 40px;font
   .auth__card .tabs{padding-left:18px;padding-right:18px}
   .tabs{grid-template-columns:1fr;gap:7px}
   .tabs--2{grid-template-columns:repeat(2,1fr)}
+  .sheet-tabs{gap:10px}
   .actions{flex-direction:column-reverse}
   .herostat{padding:18px}
   .sheetcard{padding:16px 16px 18px}
   .sheetcard__head{flex-direction:column}
+  .realizedcard{padding:16px 16px 18px}
+  .realizedcard__head{flex-direction:column;align-items:stretch}
+  .realizedcard__monthfield{min-width:0}
+  .diffcard{padding:16px 16px 18px}
+  .diffstrip{grid-template-columns:1fr}
   .sheet-scroll{max-height:min(58vh,560px)}
-  .sheet__corner,.sheet__monthcell{min-width:92px}
-  .sheet__colhead,.sheet__computed{padding-left:10px;padding-right:10px}
+  .sheet__corner,.sheet__rowhead{min-width:96px}
+  .sheet__monthhead{min-width:96px}
+  .sheet__computed{padding-left:10px;padding-right:10px}
   .monthcell{padding-left:10px;padding-right:8px}
   .cellbox{padding:0 10px;gap:3px}
   .cumcard{padding:16px 16px 18px}

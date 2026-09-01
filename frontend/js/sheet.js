@@ -9,19 +9,23 @@
   var categories = [];        // [{id,name,monthly_estimate,sort_order}]
   var incomeByMonth = {};     // {monthKey: amount}  -- só lançamentos explícitos
   var expensesByMonth = {};   // {monthKey: {catId: amount}} -- só lançamentos explícitos
+  var realizedByMonth = {};   // {monthKey: {catId: amount}} -- gasto real, digitado à mão na aba "Realizada"
+  var realizedIncomeByMonth = {}; // {monthKey: amount} -- receita real, digitada à mão na aba "Realizada"
+  var selectedRealizedMonth = null;
   var months = [];
   var manualExtra = [];
   var pendingFocus = null;    // {m, k}
   var computed = null;
   var scrollHintDismissed = false;
-  var colWidths = null;       // {value:{key:ch}, name:{catId:px}} -- recalculado a cada render
+  var colWidths = null;       // {value:{key:ch}, label:px} -- recalculado a cada render
 
   function normalizeMonth(d) { return String(d).slice(0, 7) + "-01"; }
 
   /* ============ autoajuste de coluna (tipo Excel) ============ */
-  // cada coluna nasce pequena e só cresce até caber o maior conteúdo que
-  // ela precisa mostrar (o valor mais largo lançado em qualquer mês, ou o
-  // nome do gasto) — nunca corta nem obriga a rolar dentro do campo.
+  // cada coluna de valor nasce pequena e só cresce até caber o maior número
+  // daquela LINHA (aquele gasto, em todos os meses) — nunca corta nem obriga
+  // a rolar dentro do campo. a coluna fixa de nomes (esquerda) só cresce até
+  // caber o maior nome de gasto.
   var MIN_VALUE_CH = 6;    // "999,99"
   var MIN_NAME_PX = 62;
   var measureCtx = null;
@@ -46,16 +50,17 @@
     // border-box, então esse tanto precisa entrar na largura total, senão
     // o texto vem cortado mesmo "cabendo" na medição bruta do canvas.
     var nameFont = "600 16px 'Bricolage Grotesque','Inter',system-ui,sans-serif";
-    var name = {};
+    var labelPx = MIN_NAME_PX;
     categories.forEach(function (c) {
-      name[c.id] = Math.max(MIN_NAME_PX, Math.ceil(textWidthPx(c.name, nameFont)) + 16);
+      labelPx = Math.max(labelPx, Math.ceil(textWidthPx(c.name, nameFont)) + 16);
     });
 
-    return { value: value, name: name };
+    return { value: value, label: labelPx };
   }
 
-  function setHint(msg, isError) {
-    var el = document.getElementById("sheet-savehint");
+  function setHint(msg, isError, elId) {
+    var el = document.getElementById(elId || "sheet-savehint");
+    if (!el) return;
     el.textContent = msg || " ";
     el.classList.toggle("is-error", !!isError);
   }
@@ -82,9 +87,11 @@
     return Promise.all([
       db.from("categories").select("*").eq("user_id", user.id).order("sort_order", { ascending: true }),
       db.from("income_entries").select("month,amount").eq("user_id", user.id),
-      db.from("expense_entries").select("category_id,month,amount").eq("user_id", user.id)
+      db.from("expense_entries").select("category_id,month,amount").eq("user_id", user.id),
+      db.from("realized_expense_entries").select("category_id,month,amount").eq("user_id", user.id),
+      db.from("realized_income_entries").select("month,amount").eq("user_id", user.id)
     ]).then(function (res) {
-      var catsRes = res[0], incRes = res[1], expRes = res[2];
+      var catsRes = res[0], incRes = res[1], expRes = res[2], realRes = res[3], realIncRes = res[4];
       categories = (catsRes.data || []).map(function (c) {
         return { id: c.id, name: c.name, monthly_estimate: Number(c.monthly_estimate) || 0, sort_order: c.sort_order };
       });
@@ -96,6 +103,14 @@
         if (!expensesByMonth[m]) expensesByMonth[m] = {};
         expensesByMonth[m][r.category_id] = Number(r.amount) || 0;
       });
+      realizedByMonth = {};
+      (realRes.data || []).forEach(function (r) {
+        var m = normalizeMonth(r.month);
+        if (!realizedByMonth[m]) realizedByMonth[m] = {};
+        realizedByMonth[m][r.category_id] = Number(r.amount) || 0;
+      });
+      realizedIncomeByMonth = {};
+      (realIncRes.data || []).forEach(function (r) { realizedIncomeByMonth[normalizeMonth(r.month)] = Number(r.amount) || 0; });
       recomputeMonths();
     });
   }
@@ -115,6 +130,22 @@
       .upsert({ user_id: user.id, category_id: categoryId, month: monthKey, amount: amount }, { onConflict: "user_id,category_id,month" })
       .then(function (res) {
         setHint(res.error ? "Não foi possível salvar — verifique sua internet." : "Tudo salvo.", !!res.error);
+      });
+  }
+  function upsertRealizedExpense(categoryId, monthKey, amount) {
+    setHint("Salvando…", false, "realized-savehint");
+    global.DB.client.from("realized_expense_entries")
+      .upsert({ user_id: user.id, category_id: categoryId, month: monthKey, amount: amount }, { onConflict: "user_id,category_id,month" })
+      .then(function (res) {
+        setHint(res.error ? "Não foi possível salvar — verifique sua internet." : "Tudo salvo.", !!res.error, "realized-savehint");
+      });
+  }
+  function upsertRealizedIncome(monthKey, amount) {
+    setHint("Salvando…", false, "realized-savehint");
+    global.DB.client.from("realized_income_entries")
+      .upsert({ user_id: user.id, month: monthKey, amount: amount }, { onConflict: "user_id,month" })
+      .then(function (res) {
+        setHint(res.error ? "Não foi possível salvar — verifique sua internet." : "Tudo salvo.", !!res.error, "realized-savehint");
       });
   }
 
@@ -161,7 +192,7 @@
     setHint("Salvando…");
     global.DB.client.from("categories").update({ name: name }).eq("id", catId).then(function (res) {
       setHint(res.error ? "Não foi possível renomear." : "Tudo salvo.", !!res.error);
-      render(); // reajusta a largura da coluna pro novo nome
+      render(); // reajusta a largura da coluna de nomes pro novo texto
     });
   }
   function deleteCategory(catId) {
@@ -178,6 +209,7 @@
         if (res.error) { setHint("Não foi possível remover.", true); return; }
         categories = categories.filter(function (c) { return c.id !== catId; });
         Object.keys(expensesByMonth).forEach(function (m) { delete expensesByMonth[m][catId]; });
+        Object.keys(realizedByMonth).forEach(function (m) { delete realizedByMonth[m][catId]; });
         setHint("Tudo salvo.");
         render();
       });
@@ -217,6 +249,8 @@
           profile.start_month = nextStart;
           delete incomeByMonth[monthKey];
           delete expensesByMonth[monthKey];
+          delete realizedByMonth[monthKey];
+          delete realizedIncomeByMonth[monthKey];
           manualExtra = manualExtra.filter(function (m) { return m !== monthKey; });
           recomputeMonths();
           setHint("Tudo salvo.");
@@ -241,6 +275,8 @@
         if (hadError) { setHint("Não foi possível remover.", true); return; }
         delete incomeByMonth[monthKey];
         delete expensesByMonth[monthKey];
+        delete realizedByMonth[monthKey];
+        delete realizedIncomeByMonth[monthKey];
         manualExtra = manualExtra.filter(function (m) { return m !== monthKey; });
         recomputeMonths();
         setHint("Tudo salvo.");
@@ -254,9 +290,7 @@
   // (início até o fim escolhido na etapa 3), não só pros meses que já
   // passaram — assim o aluno já vê pra onde o plano leva, com os valores
   // padrão preenchendo os meses futuros, em vez de esperar mês a mês.
-  // "Economia deste mês" e "Meses no azul" continuam sobre o que já
-  // realmente aconteceu (não dá pra ter "sequência no azul" de um mês que
-  // ainda nem chegou).
+  // "Economia deste mês" continua sobre o que já realmente aconteceu.
   function renderHero() {
     var today = Fi.todayKey();
     var realMonths = months.filter(function (m) { return m <= today; });
@@ -274,13 +308,6 @@
     document.getElementById("hs-month-value").textContent = Format.money(thisMonth);
     document.getElementById("hs-month").classList.toggle("herostat--negative", thisMonth < 0);
     document.getElementById("hs-month-caption").textContent = Format.capitalize(Fi.monthLabel(today));
-
-    var streak = 0;
-    for (var i = realMonths.length - 1; i >= 0; i--) {
-      if (computed.balance[realMonths[i]] >= 0) streak++; else break;
-    }
-    document.getElementById("hs-streak-value").textContent = String(streak);
-    document.getElementById("hs-streak-total").textContent = String(realMonths.length);
 
     var labels = months.map(function (m) {
       var withYear = Fi.yearOf(months[0]) !== Fi.yearOf(m);
@@ -314,25 +341,38 @@
   function updateScrollHint() {
     var el = document.getElementById("sheet-scroll");
     var hint = document.getElementById("sheet-scrollhint");
-    if (!el || !hint) return;
-    var overflowing = el.scrollWidth > el.clientWidth + 2;
-    hint.classList.toggle("is-on", overflowing && !scrollHintDismissed);
+    if (el && hint) hint.classList.toggle("is-on", el.scrollWidth > el.clientWidth + 2 && !scrollHintDismissed);
   }
 
   /* ============ render da tabela ============ */
-  // a planilha é montada com um mês por LINHA e um gasto por COLUNA: no
-  // celular isso vira uma rolagem vertical natural (mês a mês) em vez de
-  // rolagem lateral por muitos meses, que era a fonte da bagunça visual.
-  function cellHTML(m, key, cellState) {
+  // um GASTO por LINHA e um MÊS por COLUNA: dá pra comparar o mesmo gasto
+  // ao longo dos meses lendo a linha inteira, ou ver a "foto" de um mês
+  // inteiro lendo a coluna — igual a uma planilha de verdade.
+  function cellHTML(m, key, cellState, extraCls) {
     var val = cellState.amount;
     var muted = cellState.isDefault ? " cell--default" : "";
     var placeholder = cellState.isDefault && val ? Format.fmtNum.format(val) : "0,00";
     var widthCh = colWidths.value[key] || MIN_VALUE_CH;
-    return '<td class="sheet__cell' + (key === "income" ? " sheet__cell--income" : "") + '">' +
+    return '<td class="sheet__cell' + (extraCls || "") + '">' +
       '<div class="cellbox' + muted + '"><span class="cellbox__affix">R$</span>' +
       '<input type="text" inputmode="decimal" class="cellbox__input" style="width:' + widthCh + 'ch" placeholder="' + placeholder + '" ' +
       'value="' + (cellState.isDefault ? "" : Format.fmtNum.format(val)) + '" ' +
       'data-m="' + m + '" data-k="' + key + '"></div></td>';
+  }
+
+  function monthHeadHTML(m, col, todayKey) {
+    var isFirst = col === 0;
+    var isLast = col === months.length - 1;
+    var isToday = m === todayKey;
+    var removable = months.length > 1 && (isFirst || (isLast && manualExtra.indexOf(m) > -1));
+    var removeBtn = removable
+      ? '<button type="button" class="monthcell__remove" data-month-remove="' + col + '" aria-label="Remover ' + Format.esc(Fi.monthLabel(m)) + '" title="Remover ' + Format.esc(Fi.monthLabel(m)) + '">&times;</button>'
+      : "";
+    return '<th class="sheet__monthhead' + (isToday ? " is-today" : "") + '"><div class="monthcell">' +
+      '<div class="monthcell__text"><span class="monthcell__name">' + Format.capitalize(Fi.monthLabel(m)) + '</span>' +
+      '<span class="monthcell__year">' + Fi.yearOf(m) + '</span>' +
+      (isToday ? '<span class="monthcell__badge">atual</span>' : '') + '</div>' +
+      removeBtn + '</div></th>';
   }
 
   function render() {
@@ -340,58 +380,57 @@
     colWidths = computeColWidths();
     var todayKey = Fi.todayKey();
 
-    // ---- cabeçalho: mês | receita | gasto 1 | gasto 2 | ... | + | total | saldo ----
-    // saldo acumulado não mora mais aqui — vira uma tira própria, só leitura,
-    // logo abaixo da planilha (renderCumulative).
-    var thead = '<tr><th class="sheet__corner">Mês</th>' +
-      '<th class="sheet__colhead sheet__colhead--income">Receita</th>';
-    categories.forEach(function (cat) {
-      thead += '<th class="sheet__colhead sheet__colhead--cat" data-cat-col="' + cat.id + '">' +
-        '<div class="colhead">' +
-        '<input type="text" class="colhead__name" style="width:' + colWidths.name[cat.id] + 'px" value="' + Format.esc(cat.name) + '" title="' + Format.esc(cat.name) + '" data-cat-name="' + cat.id + '">' +
-        '<button type="button" class="colhead__remove" data-cat-remove="' + cat.id + '" aria-label="Remover ' + Format.esc(cat.name) + '">&times;</button>' +
-        '</div></th>';
-    });
-    // dois passos no mesmo lugar: nome primeiro, depois o valor mensal
-    // padrão aparece (igual à etapa 2 do onboarding) — só cria a categoria
-    // quando os dois estiverem prontos, pra já nascer com o padrão certo.
-    thead += '<th class="sheet__colhead sheet__colhead--add" id="sheet-addcat-head">' +
-      '<div class="colhead colhead--ghost"><span class="colhead__plus" aria-hidden="true">+</span>' +
-      '<input type="text" class="colhead__name colhead__name--ghost" id="sheet-newcat" placeholder="Nome do gasto"></div>' +
-      '<div class="newvalue" id="sheet-newcat-value-wrap" hidden>' +
-      '<span class="newvalue__affix">R$</span>' +
-      '<input type="text" inputmode="decimal" class="newvalue__input" id="sheet-newcat-value" placeholder="0,00 por mês"></div></th>';
-    thead += '<th class="sheet__colhead sheet__colhead--computed">Total gastos</th>';
-    thead += '<th class="sheet__colhead sheet__colhead--computed">Saldo</th>';
+    // ---- cabeçalho: gasto (canto) | mês 1 | mês 2 | ... ----
+    var thead = '<tr><th class="sheet__corner">Gasto</th>';
+    months.forEach(function (m, col) { thead += monthHeadHTML(m, col, todayKey); });
     thead += "</tr>";
     document.getElementById("sheet-thead").innerHTML = thead;
 
-    // ---- corpo: uma linha por mês ----
+    // ---- corpo: receita, cada gasto, "+ novo gasto", total, saldo — uma linha por item ----
     var body = "";
-    months.forEach(function (m, row) {
-      var isFirst = row === 0;
-      var isLast = row === months.length - 1;
-      var isToday = m === todayKey;
-      var removable = months.length > 1 && (isFirst || (isLast && manualExtra.indexOf(m) > -1));
-      var removeBtn = removable
-        ? '<button type="button" class="monthcell__remove" data-month-remove="' + row + '" aria-label="Remover ' + Format.esc(Fi.monthLabel(m)) + '" title="Remover ' + Format.esc(Fi.monthLabel(m)) + '">&times;</button>'
-        : "";
 
-      body += '<tr class="' + (isToday ? "is-today" : "") + '">';
-      body += '<td class="sheet__monthcell"><div class="monthcell">' +
-        '<div class="monthcell__text"><span class="monthcell__name">' + Format.capitalize(Fi.monthLabel(m)) + '</span>' +
-        '<span class="monthcell__year">' + Fi.yearOf(m) + '</span>' +
-        (isToday ? '<span class="monthcell__badge">atual</span>' : '') + '</div>' +
-        removeBtn + '</div></td>';
+    body += '<tr class="sheet__row--income"><td class="sheet__rowhead sheet__rowhead--label sheet__rowhead--income">Receita</td>';
+    months.forEach(function (m, col) {
+      body += cellHTML(col, "income", computed.income[m], " sheet__cell--income" + (m === todayKey ? " is-today" : ""));
+    });
+    body += "</tr>";
 
-      body += cellHTML(row, "income", computed.income[m]);
-      categories.forEach(function (cat) { body += cellHTML(row, "cat:" + cat.id, computed.expenses[cat.id][m]); });
-      body += '<td class="cell--ghost"></td>';
-      body += '<td class="sheet__computed"><span>' + Format.money(computed.totalExpenses[m]) + '</span></td>';
-      var bal = computed.balance[m];
-      body += '<td class="sheet__computed"><span class="' + (bal < 0 ? "is-negative" : "is-positive") + '">' + Format.money(bal) + '</span></td>';
+    categories.forEach(function (cat) {
+      body += '<tr><td class="sheet__rowhead"><div class="rowhead">' +
+        '<input type="text" class="rowhead__name" style="width:' + colWidths.label + 'px" value="' + Format.esc(cat.name) + '" title="' + Format.esc(cat.name) + '" data-cat-name="' + cat.id + '">' +
+        '<button type="button" class="rowhead__remove" data-cat-remove="' + cat.id + '" aria-label="Remover ' + Format.esc(cat.name) + '">&times;</button>' +
+        '</div></td>';
+      months.forEach(function (m, col) {
+        body += cellHTML(col, "cat:" + cat.id, computed.expenses[cat.id][m], m === todayKey ? " is-today" : "");
+      });
       body += "</tr>";
     });
+
+    // linha fantasma "+ novo gasto": nome primeiro, valor mensal padrão
+    // depois (igual à etapa 2 do onboarding) — só cria quando os dois
+    // estiverem prontos, pra já nascer com o padrão certo em todos os meses.
+    body += '<tr><td class="sheet__rowhead sheet__rowhead--add" id="sheet-addcat-head">' +
+      '<div class="rowhead rowhead--ghost"><span class="rowhead__plus" aria-hidden="true">+</span>' +
+      '<input type="text" class="rowhead__name rowhead__name--ghost" id="sheet-newcat" placeholder="Nome do gasto"></div>' +
+      '<div class="newvalue" id="sheet-newcat-value-wrap" hidden>' +
+      '<span class="newvalue__affix">R$</span>' +
+      '<input type="text" inputmode="decimal" class="newvalue__input" id="sheet-newcat-value" placeholder="0,00 por mês"></div></td>';
+    months.forEach(function () { body += '<td class="cell--ghost"></td>'; });
+    body += "</tr>";
+
+    body += '<tr class="sheet__row--totalstart"><td class="sheet__rowhead sheet__rowhead--label sheet__rowhead--computed">Total gastos</td>';
+    months.forEach(function (m) {
+      body += '<td class="sheet__computed' + (m === todayKey ? " is-today" : "") + '"><span>' + Format.money(computed.totalExpenses[m]) + '</span></td>';
+    });
+    body += "</tr>";
+
+    body += '<tr><td class="sheet__rowhead sheet__rowhead--label sheet__rowhead--computed">Saldo</td>';
+    months.forEach(function (m) {
+      var bal = computed.balance[m];
+      body += '<td class="sheet__computed' + (m === todayKey ? " is-today" : "") + '"><span class="' + (bal < 0 ? "is-negative" : "is-positive") + '">' + Format.money(bal) + '</span></td>';
+    });
+    body += "</tr>";
+
     document.getElementById("sheet-tbody").innerHTML = body;
 
     wireMonthRows();
@@ -399,6 +438,7 @@
     wireColHeads();
     renderCumulative();
     renderHero();
+    renderRealizedPanel();
     updateScrollHint();
 
     if (pendingFocus) {
@@ -433,17 +473,341 @@
     tbodyEl.innerHTML = body;
   }
 
+  /* ============ planilha realizada (mês selecionado: projetado x realizado) ============ */
+  // um único mês por vez (escolhido no seletor), com duas mini-planilhas do
+  // mesmo formato — cada gasto por linha, uma coluna de valor: a de cima só
+  // leitura (o que foi projetado), a de baixo editável (o que realmente
+  // aconteceu, sem editar ainda mostra o projetado como sugestão cinza,
+  // igual à planilha de projeção). No fim, uma faixa de diferença, no
+  // mesmo espírito do "Saldo acumulado" da projeção.
+  function computeRealizedCell(catId, m) {
+    var projected = computed.expenses[catId][m].amount;
+    var monthReal = realizedByMonth[m] || {};
+    var hasReal = Object.prototype.hasOwnProperty.call(monthReal, catId);
+    return { amount: hasReal ? monthReal[catId] : 0, hasReal: hasReal, projected: projected };
+  }
+
+  function computeRealizedIncome(m) {
+    var projected = computed.income[m].amount;
+    var hasReal = Object.prototype.hasOwnProperty.call(realizedIncomeByMonth, m);
+    return { amount: hasReal ? realizedIncomeByMonth[m] : 0, hasReal: hasReal, projected: projected };
+  }
+
+  function defaultRealizedMonth() {
+    var today = Fi.todayKey();
+    if (months.indexOf(today) > -1) return today;
+    var past = months.filter(function (m) { return m <= today; });
+    return past.length ? past[past.length - 1] : months[months.length - 1];
+  }
+
+  function computeMiniWidth(m) {
+    var w = MIN_VALUE_CH;
+    var incCell = computeRealizedIncome(m);
+    w = Math.max(w, Format.fmtNum.format(incCell.projected).length, Format.fmtNum.format(incCell.amount).length);
+    var totalReal = 0;
+    categories.forEach(function (c) {
+      var cell = computeRealizedCell(c.id, m);
+      w = Math.max(w, Format.fmtNum.format(cell.projected).length, Format.fmtNum.format(cell.amount).length);
+      totalReal += cell.amount;
+    });
+    w = Math.max(w, Format.fmtNum.format(computed.totalExpenses[m]).length);
+    w = Math.max(w, Format.fmtNum.format(computed.balance[m]).length);
+    w = Math.max(w, Format.fmtNum.format(totalReal).length);
+    w = Math.max(w, Format.fmtNum.format(incCell.amount - totalReal).length);
+    return w;
+  }
+
+  // mesmas classes da planilha de projeção (sheet__rowhead/sheet__computed/
+  // sheet__cell) — assim a linha nasce com a fonte, o zebra e as bordas
+  // certas de graça, sem duplicar CSS. extraCls é o extra específico da
+  // linha (ex.: "sheet__rowhead--income" na Receita, que também tinge as
+  // células de valor via "sheet__cell--income"). a célula "Realizado" só
+  // leva "sheet__cell" (o wrapper certo pra um .cellbox editável) nas
+  // linhas de gasto/receita — em "Total gastos"/"Saldo" ela é texto pronto,
+  // igual às outras duas colunas, então precisa de "sheet__computed"
+  // (mesma fonte mono tabular), senão cai na fonte padrão do body.
+  function gridRowHTML(name, projHTML, realHTML, diffHTML, rowCls, extraCls) {
+    var extra = extraCls ? " " + extraCls : "";
+    var isComputedRow = extraCls === "sheet__rowhead--computed";
+    var cellExtra = extraCls === "sheet__rowhead--income" ? " sheet__cell--income" : "";
+    var realCls = isComputedRow ? "sheet__computed" : "sheet__cell";
+    return '<tr class="' + (rowCls || "") + '">' +
+      '<td class="sheet__rowhead sheet__rowhead--label' + extra + '">' + name + '</td>' +
+      '<td class="sheet__computed' + cellExtra + '">' + projHTML + '</td>' +
+      '<td class="' + realCls + cellExtra + '">' + realHTML + '</td>' +
+      '<td class="sheet__computed' + cellExtra + '">' + diffHTML + '</td></tr>';
+  }
+
+  // isGood: true colore verde (accent-ink), false colore vermelho (danger) —
+  // mesma cor "de verdade" do cellbox editado (is-good/is-bad), não o
+  // is-positive/is-negative (--warm) usado pro saldo puro. o significado de
+  // "bom" muda por linha (gastar menos é bom, receber mais é bom), então
+  // quem chama decide a direção.
+  function diffValueHTML(diff, known, isGood) {
+    if (!known) return '<span class="realizedgrid__diff-empty">—</span>';
+    return '<span class="' + (isGood ? "is-good" : "is-bad") + '">' + Format.money(diff) + '</span>';
+  }
+
+  function monthOptionLabel(m) { return Format.capitalize(Fi.monthLabel(m)) + " de " + Fi.yearOf(m); }
+
+  function renderRealizedMonthOptions() {
+    var menu = document.getElementById("realized-month-menu");
+    var valueEl = document.getElementById("realized-month-value");
+    if (!menu || !valueEl) return;
+    var target = selectedRealizedMonth && months.indexOf(selectedRealizedMonth) > -1
+      ? selectedRealizedMonth
+      : defaultRealizedMonth();
+    selectedRealizedMonth = target;
+
+    menu.innerHTML = months.map(function (m) {
+      var selected = m === target;
+      return '<button type="button" class="monthpicker__option' + (selected ? " is-selected" : "") + '" role="option" ' +
+        'aria-selected="' + (selected ? "true" : "false") + '" data-month="' + m + '">' + Format.esc(monthOptionLabel(m)) + '</button>';
+    }).join("");
+    valueEl.textContent = monthOptionLabel(target);
+  }
+
+  function renderRealizedPanel() {
+    var tbody = document.getElementById("realized-tbody");
+    if (!tbody || !computed) return;
+
+    renderRealizedMonthOptions();
+    var m = selectedRealizedMonth;
+    if (!m) return;
+    var widthCh = computeMiniWidth(m);
+    var incCell = computeRealizedIncome(m);
+
+    // ---- linha da receita ----
+    var incDiff = incCell.amount - incCell.projected;
+    var incPlaceholder = "0,00";
+    var incBoxCls = "cellbox" + (incCell.hasReal ? "" : " cell--default");
+    if (incCell.hasReal) incBoxCls += incDiff < 0 ? " is-bad" : " is-good";
+    var incRealHTML = '<div class="' + incBoxCls + '"><span class="cellbox__affix">R$</span>' +
+      '<input type="text" inputmode="decimal" class="cellbox__input realized-money-input" style="width:' + widthCh + 'ch" placeholder="' + incPlaceholder + '" ' +
+      'value="' + (incCell.hasReal ? Format.fmtNum.format(incCell.amount) : "") + '" data-income="1"></div>';
+    var rows = gridRowHTML("Receita", "<span>" + Format.money(incCell.projected) + "</span>", incRealHTML,
+      diffValueHTML(incDiff, incCell.hasReal, incDiff >= 0), "sheet__row--income", "sheet__rowhead--income");
+
+    // ---- uma linha por gasto (projetado, realizado editável, diferença) ----
+    var totalReal = 0;
+    if (!categories.length) {
+      rows += '<tr><td class="realized-empty" colspan="4">Nenhum gasto cadastrado ainda — adicione um na planilha de projeção.</td></tr>';
+    } else {
+      categories.forEach(function (cat) {
+        var cell = computeRealizedCell(cat.id, m);
+        totalReal += cell.amount;
+        var diff = cell.amount - cell.projected;
+        var placeholder = "0,00";
+        var boxCls = "cellbox" + (cell.hasReal ? "" : " cell--default");
+        if (cell.hasReal) boxCls += diff > 0 ? " is-bad" : " is-good";
+        var realHTML = '<div class="' + boxCls + '"><span class="cellbox__affix">R$</span>' +
+          '<input type="text" inputmode="decimal" class="cellbox__input realized-money-input" style="width:' + widthCh + 'ch" placeholder="' + placeholder + '" ' +
+          'value="' + (cell.hasReal ? Format.fmtNum.format(cell.amount) : "") + '" data-cat="' + cat.id + '"></div>';
+        rows += gridRowHTML(Format.esc(cat.name), "<span>" + Format.money(cell.projected) + "</span>", realHTML,
+          diffValueHTML(diff, cell.hasReal, diff <= 0));
+      });
+    }
+
+    // ---- total gastos e saldo ----
+    var totalProj = computed.totalExpenses[m];
+    var balProj = computed.balance[m];
+    var balReal = incCell.amount - totalReal;
+    rows += gridRowHTML("Total gastos", "<span>" + Format.money(totalProj) + "</span>", "<span>" + Format.money(totalReal) + "</span>",
+      diffValueHTML(totalReal - totalProj, true, totalReal <= totalProj), "sheet__row--totalstart", "sheet__rowhead--computed");
+    rows += gridRowHTML("Saldo",
+      '<span class="' + (balProj < 0 ? "is-negative" : "is-positive") + '">' + Format.money(balProj) + "</span>",
+      '<span class="' + (balReal < 0 ? "is-negative" : "is-positive") + '">' + Format.money(balReal) + "</span>",
+      diffValueHTML(balReal - balProj, true, balReal >= balProj), "", "sheet__rowhead--computed");
+
+    tbody.innerHTML = rows;
+
+    wireRealizedInputs();
+
+    // ---- diferença (mesmo espírito do "Saldo acumulado") ----
+    var diff = balReal - balProj;
+    var diffCell = document.getElementById("realized-diff-cell");
+    var projEl = document.getElementById("realized-diff-projected");
+    var realEl = document.getElementById("realized-diff-actual");
+    var diffEl = document.getElementById("realized-diff-value");
+    if (projEl) projEl.textContent = Format.money(balProj);
+    if (realEl) realEl.textContent = Format.money(balReal);
+    if (diffEl) diffEl.textContent = Format.money(diff);
+    if (diffCell) {
+      diffCell.classList.remove("is-positive", "is-negative");
+      diffCell.classList.add(diff < 0 ? "is-negative" : "is-positive");
+    }
+
+    renderRealizedHero();
+  }
+
+  function commitRealizedInput(input) {
+    var m = selectedRealizedMonth;
+    if (!m) return;
+    var raw = input.value.trim();
+    var val = raw === "" ? null : Format.parseNumber(raw);
+    if (val != null && (!isFinite(val) || val < 0)) val = 0;
+
+    if (input.hasAttribute("data-income")) {
+      if (val == null) {
+        if (Object.prototype.hasOwnProperty.call(realizedIncomeByMonth, m)) {
+          delete realizedIncomeByMonth[m];
+          setHint("Salvando…", false, "realized-savehint");
+          global.DB.client.from("realized_income_entries").delete()
+            .eq("user_id", user.id).eq("month", m)
+            .then(function (res) {
+              setHint(res.error ? "Não foi possível salvar — verifique sua internet." : "Tudo salvo.", !!res.error, "realized-savehint");
+            });
+        }
+      } else {
+        realizedIncomeByMonth[m] = val;
+        upsertRealizedIncome(m, val);
+      }
+      renderRealizedPanel();
+      return;
+    }
+
+    var catId = input.getAttribute("data-cat");
+    if (!catId) return;
+    if (val == null) {
+      if (realizedByMonth[m] && Object.prototype.hasOwnProperty.call(realizedByMonth[m], catId)) {
+        delete realizedByMonth[m][catId];
+        setHint("Salvando…", false, "realized-savehint");
+        global.DB.client.from("realized_expense_entries").delete()
+          .eq("user_id", user.id).eq("category_id", catId).eq("month", m)
+          .then(function (res) {
+            setHint(res.error ? "Não foi possível salvar — verifique sua internet." : "Tudo salvo.", !!res.error, "realized-savehint");
+          });
+      }
+    } else {
+      if (!realizedByMonth[m]) realizedByMonth[m] = {};
+      realizedByMonth[m][catId] = val;
+      upsertRealizedExpense(catId, m, val);
+    }
+    renderRealizedPanel();
+  }
+
+  function wireRealizedInputs() {
+    document.querySelectorAll(".realized-money-input").forEach(function (input) {
+      input.addEventListener("focus", function () { input.select(); });
+      input.addEventListener("blur", function () { commitRealizedInput(input); });
+      input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); input.blur(); } });
+    });
+  }
+
+  function wireRealizedMonthPicker() {
+    var wrap = document.getElementById("realized-monthpicker");
+    var trigger = document.getElementById("realized-month-trigger");
+    var menu = document.getElementById("realized-month-menu");
+    if (!wrap || !trigger || !menu || wrap.getAttribute("data-wired")) return;
+    wrap.setAttribute("data-wired", "1");
+
+    function close() {
+      menu.hidden = true;
+      trigger.setAttribute("aria-expanded", "false");
+    }
+    function open() {
+      menu.hidden = false;
+      trigger.setAttribute("aria-expanded", "true");
+      var current = menu.querySelector('.monthpicker__option[aria-selected="true"]');
+      if (current) current.focus();
+    }
+
+    trigger.addEventListener("click", function () {
+      if (menu.hidden) open(); else close();
+    });
+    trigger.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown") { e.preventDefault(); open(); }
+      else if (e.key === "Escape") close();
+    });
+
+    menu.addEventListener("click", function (e) {
+      var opt = e.target.closest(".monthpicker__option");
+      if (!opt) return;
+      selectedRealizedMonth = opt.getAttribute("data-month");
+      close();
+      trigger.focus();
+      renderRealizedPanel();
+    });
+    menu.addEventListener("keydown", function (e) {
+      var opts = Array.prototype.slice.call(menu.querySelectorAll(".monthpicker__option"));
+      var idx = opts.indexOf(document.activeElement);
+      if (e.key === "ArrowDown") { e.preventDefault(); (opts[idx + 1] || opts[0]).focus(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); (opts[idx - 1] || opts[opts.length - 1]).focus(); }
+      else if (e.key === "Escape") { e.preventDefault(); close(); trigger.focus(); }
+      else if (e.key === "Tab") { close(); }
+    });
+
+    document.addEventListener("click", function (e) {
+      if (!menu.hidden && !wrap.contains(e.target)) close();
+    });
+  }
+
+  /* ============ hero stats da planilha realizada (só o que já aconteceu) ============ */
+  function computeRealizedSummary() {
+    var today = Fi.todayKey();
+    var running = 0, monthBal = 0, found = false;
+    months.forEach(function (m) {
+      if (m > today) return;
+      var totalReal = 0;
+      categories.forEach(function (cat) { totalReal += computeRealizedCell(cat.id, m).amount; });
+      var bal = computeRealizedIncome(m).amount - totalReal;
+      running += bal;
+      if (m === today) { monthBal = bal; found = true; }
+    });
+    return { total: running, month: found ? monthBal : 0 };
+  }
+
+  function renderRealizedHero() {
+    if (!computed) return;
+    var totalEl = document.getElementById("rhs-total-value");
+    var totalCard = document.getElementById("rhs-total");
+    var monthEl = document.getElementById("rhs-month-value");
+    var monthCard = document.getElementById("rhs-month");
+    var monthCaption = document.getElementById("rhs-month-caption");
+    if (!totalEl || !monthEl) return;
+
+    var summary = computeRealizedSummary();
+    totalEl.textContent = Format.money(summary.total);
+    if (totalCard) totalCard.classList.toggle("herostat--negative", summary.total < 0);
+    monthEl.textContent = Format.money(summary.month);
+    if (monthCard) monthCard.classList.toggle("herostat--negative", summary.month < 0);
+    if (monthCaption) monthCaption.textContent = Format.capitalize(Fi.monthLabel(Fi.todayKey()));
+  }
+
+  function wireSheetTabs() {
+    var tabProj = document.getElementById("tab-sheet-projecao");
+    var tabReal = document.getElementById("tab-sheet-realizada");
+    var panelProj = document.getElementById("sheet-panel-projecao");
+    var panelReal = document.getElementById("sheet-panel-realizada");
+    if (!tabProj || !tabReal || tabProj.getAttribute("data-wired")) return;
+    tabProj.setAttribute("data-wired", "1");
+
+    function activate(which) {
+      var isProj = which === "projecao";
+      tabProj.setAttribute("aria-selected", isProj ? "true" : "false");
+      tabProj.tabIndex = isProj ? 0 : -1;
+      tabReal.setAttribute("aria-selected", isProj ? "false" : "true");
+      tabReal.tabIndex = isProj ? -1 : 0;
+      panelProj.hidden = !isProj;
+      panelReal.hidden = isProj;
+      if (!isProj) renderRealizedPanel();
+      updateScrollHint();
+    }
+    tabProj.addEventListener("click", function () { activate("projecao"); });
+    tabReal.addEventListener("click", function () { activate("realizada"); });
+  }
+
   function wireMonthRows() {
     document.querySelectorAll("[data-month-remove]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        var row = parseInt(btn.getAttribute("data-month-remove"), 10);
-        if (row === 0) removeFirstMonth(); else removeLastMonth();
+        var col = parseInt(btn.getAttribute("data-month-remove"), 10);
+        if (col === 0) removeFirstMonth(); else removeLastMonth();
       });
     });
   }
 
   function wireCells() {
-    document.querySelectorAll(".cellbox__input").forEach(function (input) {
+    document.querySelectorAll("#sheet-tbody .cellbox__input").forEach(function (input) {
       input.addEventListener("focus", function () { input.select(); });
       input.addEventListener("input", function () { input.setAttribute("data-dirty", "1"); });
       input.addEventListener("blur", function () {
@@ -521,6 +885,9 @@
       render();
     });
 
+    wireSheetTabs();
+    wireRealizedMonthPicker();
+
     // redesenha o gráfico quando a tela muda de tamanho (ex.: girar o celular),
     // já que o SVG usa a largura real do contêiner para o texto ficar legível.
     var resizeTimer = null;
@@ -544,7 +911,9 @@
   function show(u, p) {
     user = u; profile = p;
     manualExtra = [];
+    selectedRealizedMonth = null;
     setHint("");
+    setHint("", false, "realized-savehint");
     loadAll().then(render);
   }
 
