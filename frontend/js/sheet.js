@@ -137,6 +137,7 @@
     global.DB.client.from("realized_expense_entries")
       .upsert({ user_id: user.id, category_id: categoryId, month: monthKey, amount: amount }, { onConflict: "user_id,category_id,month" })
       .then(function (res) {
+        if (res.error) console.error("realized_expense_entries upsert:", res.error);
         setHint(res.error ? "Não foi possível salvar — verifique sua internet." : "Tudo salvo.", !!res.error, "realized-savehint");
       });
   }
@@ -145,6 +146,7 @@
     global.DB.client.from("realized_income_entries")
       .upsert({ user_id: user.id, month: monthKey, amount: amount }, { onConflict: "user_id,month" })
       .then(function (res) {
+        if (res.error) console.error("realized_income_entries upsert:", res.error);
         setHint(res.error ? "Não foi possível salvar — verifique sua internet." : "Tudo salvo.", !!res.error, "realized-savehint");
       });
   }
@@ -655,6 +657,7 @@
           global.DB.client.from("realized_income_entries").delete()
             .eq("user_id", user.id).eq("month", m)
             .then(function (res) {
+              if (res.error) console.error("realized_income_entries delete:", res.error);
               setHint(res.error ? "Não foi possível salvar — verifique sua internet." : "Tudo salvo.", !!res.error, "realized-savehint");
             });
         }
@@ -675,6 +678,7 @@
         global.DB.client.from("realized_expense_entries").delete()
           .eq("user_id", user.id).eq("category_id", catId).eq("month", m)
           .then(function (res) {
+            if (res.error) console.error("realized_expense_entries delete:", res.error);
             setHint(res.error ? "Não foi possível salvar — verifique sua internet." : "Tudo salvo.", !!res.error, "realized-savehint");
           });
       }
