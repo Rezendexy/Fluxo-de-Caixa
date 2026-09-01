@@ -11,15 +11,52 @@
   var expensesByMonth = {};   // {monthKey: {catId: amount}} -- só lançamentos explícitos
   var months = [];
   var manualExtra = [];
-  var pendingFocus = null;    // {row, col}
+  var pendingFocus = null;    // {m, k}
   var computed = null;
   var scrollHintDismissed = false;
+  var colWidths = null;       // {value:{key:ch}, name:{catId:px}} -- recalculado a cada render
 
   function normalizeMonth(d) { return String(d).slice(0, 7) + "-01"; }
 
+  /* ============ autoajuste de coluna (tipo Excel) ============ */
+  // cada coluna nasce pequena e só cresce até caber o maior conteúdo que
+  // ela precisa mostrar (o valor mais largo lançado em qualquer mês, ou o
+  // nome do gasto) — nunca corta nem obriga a rolar dentro do campo.
+  var MIN_VALUE_CH = 6;    // "999,99"
+  var MIN_NAME_PX = 62;
+  var measureCtx = null;
+  function textWidthPx(text, font) {
+    if (!measureCtx) measureCtx = document.createElement("canvas").getContext("2d");
+    measureCtx.font = font;
+    return measureCtx.measureText(String(text)).width;
+  }
+  function computeColWidths() {
+    var value = { income: MIN_VALUE_CH };
+    categories.forEach(function (c) { value["cat:" + c.id] = MIN_VALUE_CH; });
+
+    months.forEach(function (m) {
+      value.income = Math.max(value.income, Format.fmtNum.format(computed.income[m].amount).length);
+      categories.forEach(function (c) {
+        var k = "cat:" + c.id;
+        value[k] = Math.max(value[k], Format.fmtNum.format(computed.expenses[c.id][m].amount).length);
+      });
+    });
+
+    // +16: o input tem padding:8px 4px (8px de cada lado) e box-sizing
+    // border-box, então esse tanto precisa entrar na largura total, senão
+    // o texto vem cortado mesmo "cabendo" na medição bruta do canvas.
+    var nameFont = "600 16px 'Bricolage Grotesque','Inter',system-ui,sans-serif";
+    var name = {};
+    categories.forEach(function (c) {
+      name[c.id] = Math.max(MIN_NAME_PX, Math.ceil(textWidthPx(c.name, nameFont)) + 16);
+    });
+
+    return { value: value, name: name };
+  }
+
   function setHint(msg, isError) {
     var el = document.getElementById("sheet-savehint");
-    el.textContent = msg || " ";
+    el.textContent = msg || " ";
     el.classList.toggle("is-error", !!isError);
   }
 
@@ -30,11 +67,13 @@
     manualExtra.forEach(function (m) { if (m > latest) latest = m; });
     var start = normalizeMonth(profile.start_month || Fi.todayKey());
     if (start > latest) latest = start;
+    // o período escolhido no onboarding garante que a planilha já nasça com
+    // todos os meses futuros planejados, mesmo sem nenhum lançamento neles.
+    if (profile.plan_end_month) {
+      var planEnd = normalizeMonth(profile.plan_end_month);
+      if (planEnd > latest) latest = planEnd;
+    }
     months = Fi.monthRange(start, latest);
-  }
-
-  function editableRowKeys() {
-    return ["income"].concat(categories.map(function (c) { return "cat:" + c.id; }));
   }
 
   /* ============ carregamento ============ */
@@ -80,18 +119,17 @@
   }
 
   function commitCell(input) {
-    var rowKey = input.getAttribute("data-row");
-    var col = parseInt(input.getAttribute("data-col"), 10);
-    var monthKey = months[col];
+    var monthKey = months[parseInt(input.getAttribute("data-m"), 10)];
+    var key = input.getAttribute("data-k");
     var raw = input.value.trim();
     var val = raw === "" ? 0 : Format.parseNumber(raw);
     if (!isFinite(val) || val < 0) val = 0;
 
-    if (rowKey === "income") {
+    if (key === "income") {
       incomeByMonth[monthKey] = val;
       upsertIncome(monthKey, val);
     } else {
-      var catId = rowKey.slice(4);
+      var catId = key.slice(4);
       if (!expensesByMonth[monthKey]) expensesByMonth[monthKey] = {};
       expensesByMonth[monthKey][catId] = val;
       upsertExpense(catId, monthKey, val);
@@ -99,15 +137,19 @@
   }
 
   /* ============ categorias ============ */
-  function addCategory(name) {
+  // monthlyEstimate vira o padrão do gasto em todos os meses (igual à etapa
+  // 2 do onboarding) — sem isso, um gasto criado direto na planilha só
+  // teria valor no mês em que foi digitado, e os outros meses cairiam pra
+  // zero em vez de repetir o mesmo valor.
+  function addCategory(name, monthlyEstimate) {
     var sortOrder = categories.length ? Math.max.apply(null, categories.map(function (c) { return c.sort_order; })) + 1 : 0;
     setHint("Salvando…");
     return global.DB.client.from("categories")
-      .insert({ user_id: user.id, name: name, monthly_estimate: 0, sort_order: sortOrder })
+      .insert({ user_id: user.id, name: name, monthly_estimate: monthlyEstimate || 0, sort_order: sortOrder })
       .select().single()
       .then(function (res) {
         if (res.error) { setHint("Não foi possível adicionar o gasto.", true); return; }
-        categories.push({ id: res.data.id, name: res.data.name, monthly_estimate: 0, sort_order: res.data.sort_order });
+        categories.push({ id: res.data.id, name: res.data.name, monthly_estimate: Number(res.data.monthly_estimate) || 0, sort_order: res.data.sort_order });
         setHint("Tudo salvo.");
         render();
       });
@@ -119,6 +161,7 @@
     setHint("Salvando…");
     global.DB.client.from("categories").update({ name: name }).eq("id", catId).then(function (res) {
       setHint(res.error ? "Não foi possível renomear." : "Tudo salvo.", !!res.error);
+      render(); // reajusta a largura da coluna pro novo nome
     });
   }
   function deleteCategory(catId) {
@@ -145,7 +188,8 @@
   // a planilha é sempre um intervalo contínuo entre o mês inicial e o mais
   // recente, então só dá pra encolher pelas pontas: tirando o primeiro mês
   // (empurra o início pra frente) ou desfazendo um mês futuro adicionado
-  // manualmente (o mês atual de verdade nunca sai, ele volta sozinho).
+  // manualmente (o mês atual de verdade e o fim do período planejado nunca
+  // saem sozinhos, eles voltam na próxima renderização).
   function deleteMonthEntries(monthKey) {
     return Promise.all([
       global.DB.client.from("income_entries").delete().eq("month", monthKey),
@@ -184,7 +228,7 @@
   function removeLastMonth() {
     if (months.length <= 1) return;
     var monthKey = months[months.length - 1];
-    if (manualExtra.indexOf(monthKey) === -1) return; // o mês atual de verdade não pode ser removido
+    if (manualExtra.indexOf(monthKey) === -1) return; // mês atual / fim do período planejado não podem ser removidos assim
     global.Dialog.confirm({
       title: "Remover mês",
       message: "Remover " + Fi.monthLabel(monthKey) + " de " + Fi.yearOf(monthKey) + " da planilha?",
@@ -206,19 +250,26 @@
   }
 
   /* ============ hero stats + gráfico ============ */
+  // "Total economizado" e o gráfico olham pro PERÍODO INTEIRO da planilha
+  // (início até o fim escolhido na etapa 3), não só pros meses que já
+  // passaram — assim o aluno já vê pra onde o plano leva, com os valores
+  // padrão preenchendo os meses futuros, em vez de esperar mês a mês.
+  // "Economia deste mês" e "Meses no azul" continuam sobre o que já
+  // realmente aconteceu (não dá pra ter "sequência no azul" de um mês que
+  // ainda nem chegou).
   function renderHero() {
     var today = Fi.todayKey();
     var realMonths = months.filter(function (m) { return m <= today; });
-    var lastReal = realMonths.length ? realMonths[realMonths.length - 1] : null;
+    var lastMonth = months[months.length - 1];
 
-    var total = lastReal ? computed.cumulative[lastReal] : 0;
+    var total = computed.cumulative[lastMonth];
     var thisMonth = realMonths.indexOf(today) > -1 ? computed.balance[today] : 0;
 
     document.getElementById("hs-total-value").textContent = Format.money(total);
     document.getElementById("hs-total").classList.toggle("herostat--negative", total < 0);
-    document.getElementById("hs-total-caption").textContent = total >= 0
-      ? "desde que você começou a controlar seus gastos"
-      : "você ainda está gastando mais do que recebe — dá para virar o jogo";
+    document.getElementById("hs-total-caption").textContent =
+      "previsto até " + Fi.monthLabel(lastMonth) + " de " + Fi.yearOf(lastMonth) +
+      (total >= 0 ? ", considerando o que já foi planejado" : " — os gastos planejados estão maiores que a receita");
 
     document.getElementById("hs-month-value").textContent = Format.money(thisMonth);
     document.getElementById("hs-month").classList.toggle("herostat--negative", thisMonth < 0);
@@ -231,14 +282,14 @@
     document.getElementById("hs-streak-value").textContent = String(streak);
     document.getElementById("hs-streak-total").textContent = String(realMonths.length);
 
-    var labels = realMonths.map(function (m) {
-      var withYear = Fi.yearOf(realMonths[0]) !== Fi.yearOf(m);
+    var labels = months.map(function (m) {
+      var withYear = Fi.yearOf(months[0]) !== Fi.yearOf(m);
       return MES_ABREV[parseInt(m.split("-")[1], 10) - 1] + (withYear ? "/" + String(Fi.yearOf(m)).slice(2) : "");
     });
-    var values = realMonths.map(function (m) { return computed.cumulative[m]; });
+    var values = months.map(function (m) { return computed.cumulative[m]; });
     var single = null;
-    if (realMonths.length === 1) {
-      var m0 = realMonths[0];
+    if (months.length === 1) {
+      var m0 = months[0];
       single = {
         income: computed.income[m0].amount,
         expenses: computed.totalExpenses[m0],
@@ -251,7 +302,7 @@
       values: values,
       single: single,
       tooltip: function (k) {
-        var m = realMonths[k];
+        var m = months[k];
         return '<div class="tip__time">' + Format.capitalize(Fi.monthLabel(m)) + " de " + Fi.yearOf(m) + '</div>' +
           '<div class="tip__main">' + Format.money(values[k]) + '</div>' +
           '<div class="tip__label">saldo acumulado</div>';
@@ -269,98 +320,124 @@
   }
 
   /* ============ render da tabela ============ */
-  function cellHTML(rowKey, col, cellState) {
+  // a planilha é montada com um mês por LINHA e um gasto por COLUNA: no
+  // celular isso vira uma rolagem vertical natural (mês a mês) em vez de
+  // rolagem lateral por muitos meses, que era a fonte da bagunça visual.
+  function cellHTML(m, key, cellState) {
     var val = cellState.amount;
     var muted = cellState.isDefault ? " cell--default" : "";
     var placeholder = cellState.isDefault && val ? Format.fmtNum.format(val) : "0,00";
-    return '<td class="sheet__cell">' +
+    var widthCh = colWidths.value[key] || MIN_VALUE_CH;
+    return '<td class="sheet__cell' + (key === "income" ? " sheet__cell--income" : "") + '">' +
       '<div class="cellbox' + muted + '"><span class="cellbox__affix">R$</span>' +
-      '<input type="text" inputmode="decimal" class="cellbox__input" placeholder="' + placeholder + '" ' +
+      '<input type="text" inputmode="decimal" class="cellbox__input" style="width:' + widthCh + 'ch" placeholder="' + placeholder + '" ' +
       'value="' + (cellState.isDefault ? "" : Format.fmtNum.format(val)) + '" ' +
-      'data-row="' + rowKey + '" data-col="' + col + '"></div></td>';
+      'data-m="' + m + '" data-k="' + key + '"></div></td>';
   }
 
   function render() {
     computed = Fi.computeSheet(months, categories, profile.monthly_income, incomeByMonth, expensesByMonth);
+    colWidths = computeColWidths();
     var todayKey = Fi.todayKey();
 
-    // ---- cabeçalho ----
-    var thead = '<tr><th class="sheet__corner">&nbsp;</th>';
-    months.forEach(function (m, col) {
-      var isFirst = col === 0;
-      var isLast = col === months.length - 1;
+    // ---- cabeçalho: mês | receita | gasto 1 | gasto 2 | ... | + | total | saldo ----
+    // saldo acumulado não mora mais aqui — vira uma tira própria, só leitura,
+    // logo abaixo da planilha (renderCumulative).
+    var thead = '<tr><th class="sheet__corner">Mês</th>' +
+      '<th class="sheet__colhead sheet__colhead--income">Receita</th>';
+    categories.forEach(function (cat) {
+      thead += '<th class="sheet__colhead sheet__colhead--cat" data-cat-col="' + cat.id + '">' +
+        '<div class="colhead">' +
+        '<input type="text" class="colhead__name" style="width:' + colWidths.name[cat.id] + 'px" value="' + Format.esc(cat.name) + '" title="' + Format.esc(cat.name) + '" data-cat-name="' + cat.id + '">' +
+        '<button type="button" class="colhead__remove" data-cat-remove="' + cat.id + '" aria-label="Remover ' + Format.esc(cat.name) + '">&times;</button>' +
+        '</div></th>';
+    });
+    // dois passos no mesmo lugar: nome primeiro, depois o valor mensal
+    // padrão aparece (igual à etapa 2 do onboarding) — só cria a categoria
+    // quando os dois estiverem prontos, pra já nascer com o padrão certo.
+    thead += '<th class="sheet__colhead sheet__colhead--add" id="sheet-addcat-head">' +
+      '<div class="colhead colhead--ghost"><span class="colhead__plus" aria-hidden="true">+</span>' +
+      '<input type="text" class="colhead__name colhead__name--ghost" id="sheet-newcat" placeholder="Nome do gasto"></div>' +
+      '<div class="newvalue" id="sheet-newcat-value-wrap" hidden>' +
+      '<span class="newvalue__affix">R$</span>' +
+      '<input type="text" inputmode="decimal" class="newvalue__input" id="sheet-newcat-value" placeholder="0,00 por mês"></div></th>';
+    thead += '<th class="sheet__colhead sheet__colhead--computed">Total gastos</th>';
+    thead += '<th class="sheet__colhead sheet__colhead--computed">Saldo</th>';
+    thead += "</tr>";
+    document.getElementById("sheet-thead").innerHTML = thead;
+
+    // ---- corpo: uma linha por mês ----
+    var body = "";
+    months.forEach(function (m, row) {
+      var isFirst = row === 0;
+      var isLast = row === months.length - 1;
       var isToday = m === todayKey;
       var removable = months.length > 1 && (isFirst || (isLast && manualExtra.indexOf(m) > -1));
       var removeBtn = removable
-        ? '<button type="button" class="sheet__monthremove" data-month-remove="' + col + '" aria-label="Remover ' + Format.esc(Fi.monthLabel(m)) + '" title="Remover ' + Format.esc(Fi.monthLabel(m)) + '">&times;</button>'
+        ? '<button type="button" class="monthcell__remove" data-month-remove="' + row + '" aria-label="Remover ' + Format.esc(Fi.monthLabel(m)) + '" title="Remover ' + Format.esc(Fi.monthLabel(m)) + '">&times;</button>'
         : "";
-      thead += '<th class="sheet__monthhead' + (isToday ? ' is-today' : '') + '">' + removeBtn + '<span class="sheet__monthname">' + Format.capitalize(Fi.monthLabel(m)) + '</span>' +
-        '<span class="sheet__monthyear">' + Fi.yearOf(m) + '</span>' + (isToday ? '<span class="sheet__monthbadge">atual</span>' : '') + '</th>';
-    });
-    thead += "</tr>";
-    document.getElementById("sheet-thead").innerHTML = thead;
-    wireMonthHeads();
 
-    // ---- corpo ----
-    var body = "";
+      body += '<tr class="' + (isToday ? "is-today" : "") + '">';
+      body += '<td class="sheet__monthcell"><div class="monthcell">' +
+        '<div class="monthcell__text"><span class="monthcell__name">' + Format.capitalize(Fi.monthLabel(m)) + '</span>' +
+        '<span class="monthcell__year">' + Fi.yearOf(m) + '</span>' +
+        (isToday ? '<span class="monthcell__badge">atual</span>' : '') + '</div>' +
+        removeBtn + '</div></td>';
 
-    body += '<tr class="row--income"><td class="sheet__rowhead">Receita</td>';
-    months.forEach(function (m, col) { body += cellHTML("income", col, computed.income[m]); });
-    body += "</tr>";
-
-    categories.forEach(function (cat) {
-      body += '<tr class="row--expense" data-cat-row="' + cat.id + '">' +
-        '<td class="sheet__rowhead sheet__rowhead--editable">' +
-        '<input type="text" class="rowname" value="' + Format.esc(cat.name) + '" title="' + Format.esc(cat.name) + '" data-cat-name="' + cat.id + '">' +
-        '<button type="button" class="rowremove" data-cat-remove="' + cat.id + '" aria-label="Remover ' + Format.esc(cat.name) + '">&times;</button>' +
-        '</td>';
-      months.forEach(function (m, col) { body += cellHTML("cat:" + cat.id, col, computed.expenses[cat.id][m]); });
+      body += cellHTML(row, "income", computed.income[m]);
+      categories.forEach(function (cat) { body += cellHTML(row, "cat:" + cat.id, computed.expenses[cat.id][m]); });
+      body += '<td class="cell--ghost"></td>';
+      body += '<td class="sheet__computed"><span>' + Format.money(computed.totalExpenses[m]) + '</span></td>';
+      var bal = computed.balance[m];
+      body += '<td class="sheet__computed"><span class="' + (bal < 0 ? "is-negative" : "is-positive") + '">' + Format.money(bal) + '</span></td>';
       body += "</tr>";
     });
-
-    body += '<tr class="row--addcat" id="sheet-addcat-row"><td class="sheet__rowhead sheet__rowhead--editable">' +
-      '<span class="rowname__plus" aria-hidden="true">+</span>' +
-      '<input type="text" class="rowname rowname--ghost" id="sheet-newcat" placeholder="Adicionar gasto"></td>' +
-      '<td class="cell--ghost" colspan="' + months.length + '"></td></tr>';
-
-    body += '<tr class="row--total"><td class="sheet__rowhead">Total gastos</td>';
-    months.forEach(function (m) { body += '<td class="sheet__computed"><span>' + Format.money(computed.totalExpenses[m]) + '</span></td>'; });
-    body += "</tr>";
-
-    body += '<tr class="row--balance"><td class="sheet__rowhead">Saldo</td>';
-    months.forEach(function (m) {
-      var v = computed.balance[m];
-      body += '<td class="sheet__computed"><span class="' + (v < 0 ? "is-negative" : "is-positive") + '">' + Format.money(v) + '</span></td>';
-    });
-    body += "</tr>";
-
-    body += '<tr class="row--cumulative"><td class="sheet__rowhead">Saldo acumulado</td>';
-    months.forEach(function (m) {
-      var v = computed.cumulative[m];
-      body += '<td class="sheet__computed"><span class="' + (v < 0 ? "is-negative" : "is-positive") + '">' + Format.money(v) + '</span></td>';
-    });
-    body += "</tr>";
-
     document.getElementById("sheet-tbody").innerHTML = body;
 
+    wireMonthRows();
     wireCells();
-    wireRowHeads();
+    wireColHeads();
+    renderCumulative();
     renderHero();
     updateScrollHint();
 
     if (pendingFocus) {
-      var sel = '[data-row="' + pendingFocus.row + '"][data-col="' + pendingFocus.col + '"]';
+      var sel = '[data-m="' + pendingFocus.m + '"][data-k="' + pendingFocus.k + '"]';
       var el = document.querySelector(sel);
       pendingFocus = null;
       if (el) { el.focus(); el.select(); }
     }
   }
 
-  function wireMonthHeads() {
+  /* ============ tira do saldo acumulado (só leitura, mês em coluna) ============ */
+  function renderCumulative() {
+    var theadEl = document.getElementById("cum-thead");
+    var tbodyEl = document.getElementById("cum-tbody");
+    if (!theadEl || !tbodyEl) return;
+    var todayKey = Fi.todayKey();
+
+    var thead = "<tr>";
+    var body = "<tr>";
+    months.forEach(function (m) {
+      var isToday = m === todayKey;
+      thead += '<th class="cum__monthhead' + (isToday ? " is-today" : "") + '">' +
+        '<span class="cum__monthname">' + Format.capitalize(Fi.monthLabel(m)) + '</span>' +
+        '<span class="cum__monthyear">' + Fi.yearOf(m) + '</span></th>';
+      var v = computed.cumulative[m];
+      body += '<td class="cum__cell' + (isToday ? " is-today" : "") + '">' +
+        '<span class="' + (v < 0 ? "is-negative" : "is-positive") + '">' + Format.money(v) + '</span></td>';
+    });
+    thead += "</tr>";
+    body += "</tr>";
+    theadEl.innerHTML = thead;
+    tbodyEl.innerHTML = body;
+  }
+
+  function wireMonthRows() {
     document.querySelectorAll("[data-month-remove]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        var col = parseInt(btn.getAttribute("data-month-remove"), 10);
-        if (col === 0) removeFirstMonth(); else removeLastMonth();
+        var row = parseInt(btn.getAttribute("data-month-remove"), 10);
+        if (row === 0) removeFirstMonth(); else removeLastMonth();
       });
     });
   }
@@ -378,17 +455,16 @@
       input.addEventListener("keydown", function (e) {
         if (e.key !== "Enter") return;
         e.preventDefault();
-        var rows = editableRowKeys();
-        var rowKey = input.getAttribute("data-row");
-        var col = parseInt(input.getAttribute("data-col"), 10);
-        var idx = Math.min(rows.length - 1, rows.indexOf(rowKey) + 1);
-        pendingFocus = { row: rows[idx], col: col };
+        var key = input.getAttribute("data-k");
+        var m = parseInt(input.getAttribute("data-m"), 10);
+        var nextM = Math.min(months.length - 1, m + 1);
+        pendingFocus = { m: nextM, k: key };
         input.blur();
       });
     });
   }
 
-  function wireRowHeads() {
+  function wireColHeads() {
     document.querySelectorAll("[data-cat-name]").forEach(function (input) {
       input.addEventListener("blur", function () {
         var name = input.value.trim();
@@ -402,19 +478,36 @@
     document.querySelectorAll("[data-cat-remove]").forEach(function (btn) {
       btn.addEventListener("click", function () { deleteCategory(btn.getAttribute("data-cat-remove")); });
     });
+    // etapa 1: nome. Ao confirmar, revela a etapa 2 (valor mensal) em vez
+    // de criar na hora — só cria quando o valor também for confirmado, pra
+    // já nascer com o padrão certo em todos os meses.
     var newcat = document.getElementById("sheet-newcat");
+    var newcatValueWrap = document.getElementById("sheet-newcat-value-wrap");
+    var newcatValue = document.getElementById("sheet-newcat-value");
     if (newcat) {
       newcat.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); newcat.blur(); } });
       newcat.addEventListener("blur", function () {
         var name = newcat.value.trim();
-        if (!name) return;
-        addCategory(name);
+        if (!name || !newcatValueWrap) return;
+        newcatValueWrap.hidden = false;
+        newcatValue.focus();
       });
     }
-    var addRow = document.getElementById("sheet-addcat-row");
-    if (addRow) {
-      addRow.addEventListener("click", function (e) {
-        if (e.target && e.target.id === "sheet-newcat") return;
+    // etapa 2: valor mensal padrão.
+    if (newcatValue) {
+      newcatValue.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); newcatValue.blur(); } });
+      newcatValue.addEventListener("blur", function () {
+        var name = newcat ? newcat.value.trim() : "";
+        if (!name) { newcatValueWrap.hidden = true; return; }
+        var amount = Format.parseNumber(newcatValue.value);
+        addCategory(name, isFinite(amount) && amount > 0 ? amount : 0);
+      });
+    }
+    var addHead = document.getElementById("sheet-addcat-head");
+    if (addHead) {
+      addHead.addEventListener("click", function (e) {
+        if (e.target && (e.target.id === "sheet-newcat" || e.target.id === "sheet-newcat-value")) return;
+        if (newcatValueWrap && !newcatValueWrap.hidden) { newcatValue.focus(); return; }
         if (newcat) newcat.focus();
       });
     }

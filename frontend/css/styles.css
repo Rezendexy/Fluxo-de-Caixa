@@ -207,13 +207,22 @@ input{font:inherit}
 .tab--step.is-done .tab__n::after{content:"";display:inline-block;margin-left:5px;width:10px;height:10px;vertical-align:-1px;background-color:var(--accent-ink);-webkit-mask:var(--icon-check) center/contain no-repeat;mask:var(--icon-check) center/contain no-repeat}
 
 .ob-rows{display:flex;flex-direction:column;gap:10px;margin-top:16px}
-.ob-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
-.ob-row__name{border:1px solid var(--line-strong);background:var(--surface-2);border-radius:11px;padding:12px 13px;font-size:16px;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* flex-wrap em vez de grid fixo: em telas estreitas o valor mensal quebra
+   para uma segunda linha sozinho, sem nunca sobrepor o nome do gasto. */
+.ob-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ob-row__name{flex:1 1 160px;min-width:0;border:1px solid var(--line-strong);background:var(--surface-2);border-radius:11px;padding:12px 13px;font-size:16px;color:var(--ink);overflow:hidden;text-overflow:ellipsis}
 .ob-row__name:focus{outline:none;border-color:var(--focus);box-shadow:0 0 0 3px var(--accent-soft)}
+.ob-row__value{display:flex;align-items:center;gap:6px;flex:1 1 128px;min-width:110px;max-width:150px;border:1px solid var(--line-strong);background:var(--surface-2);border-radius:11px;padding:0 12px}
+.ob-row__value:focus-within{border-color:var(--focus);box-shadow:0 0 0 3px var(--accent-soft)}
+.ob-row__value .input__affix{font-family:var(--ff-mono);font-size:13px;color:var(--muted);flex:none}
+.ob-row__amount{width:100%;min-width:0;border:0;background:transparent;padding:12px 0;font-family:var(--ff-mono);font-size:16px;font-weight:500;color:var(--ink);text-align:right}
+.ob-row__amount:focus{outline:none}
+.ob-row__amount::placeholder{color:var(--muted);opacity:.6}
 .ob-row__remove{width:34px;height:34px;flex:none;border:1px solid var(--line);border-radius:9px;background:transparent;font-size:18px;line-height:1;color:var(--muted);cursor:pointer}
 .ob-row__remove:hover{border-color:var(--danger);color:var(--danger)}
 .ob-addrow{width:100%;margin-top:12px;flex:none;text-align:center}
 #ob-suggestions{margin-top:0}
+.ob-period-preview{margin-top:10px;font-size:13px;color:var(--ink-soft);line-height:1.5}
 
 /* ---------- Hero stats (planilha) ---------- */
 .herostats{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:14px;margin-top:26px}
@@ -254,60 +263,129 @@ input{font:inherit}
 .chart-balance.is-negative .chart-balance__value{color:var(--warm)}
 
 /* ---------- Planilha ---------- */
+/* Um mês por LINHA e um gasto por COLUNA (em vez do contrário). No celular
+   isso vira rolagem vertical natural mês a mês; a rolagem lateral (dentro de
+   um contêiner com altura própria, não a página) só entra em jogo se houver
+   muitos gastos cadastrados. Nada aqui usa posicionamento absoluto sobre
+   texto — cabeçalhos e células usam flexbox, então nunca há sobreposição,
+   só quebra de linha/rolagem quando o conteúdo não cabe. */
 .sheetcard{margin-top:18px;padding:20px 22px 22px}
 .sheetcard__head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
 .sheet-savehint{min-height:18px;font-size:12px;color:var(--muted);margin-top:2px}
 .sheet-savehint.is-error{color:var(--danger)}
-.sheet-scroll{overflow-x:auto;margin-top:16px;border:1px solid var(--line);border-radius:var(--radius);-webkit-overflow-scrolling:touch;box-shadow:var(--shadow-sm)}
+.sheet-scroll{overflow:auto;margin-top:16px;border:1px solid var(--line);border-radius:var(--radius);-webkit-overflow-scrolling:touch;box-shadow:var(--shadow-sm);max-height:min(64vh,640px)}
+/* barra de rolagem fina e discreta em vez da barra padrão grossa do
+   navegador, tanto no eixo vertical (meses) quanto horizontal (gastos). */
+.sheet-scroll{scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+.sheet-scroll::-webkit-scrollbar{width:9px;height:9px}
+.sheet-scroll::-webkit-scrollbar-track{background:transparent}
+.sheet-scroll::-webkit-scrollbar-corner{background:transparent}
+.sheet-scroll::-webkit-scrollbar-thumb{background-color:var(--line-strong);border-radius:999px;border:2px solid var(--surface);background-clip:padding-box}
+.sheet-scroll::-webkit-scrollbar-thumb:hover{background-color:var(--muted)}
 .sheet-scrollhint{display:none;text-align:center;font-size:11.5px;color:var(--muted);margin-top:8px}
 .sheet-scrollhint.is-on{display:block}
-.sheet{border-collapse:separate;border-spacing:0;width:100%;min-width:640px}
+/* sem width:100% de propósito — uma tabela sem largura fixa encolhe pro
+   tamanho do conteúdo (poucos gastos = tabela estreita, sem esticar colunas
+   à toa) e só cresce além do contêiner (ativando a rolagem) quando o
+   conteúdo realmente precisa. */
+.sheet{border-collapse:separate;border-spacing:0}
 .sheet th,.sheet td{border-bottom:1px solid var(--line);white-space:nowrap}
 .sheet thead th{background:var(--surface-2);border-bottom:1px solid var(--line-strong)}
-.sheet__corner{position:sticky;left:0;z-index:3;min-width:172px;background:var(--surface-2);border-right:1px solid var(--line)}
-.sheet__monthhead,.sheet__cell,.sheet__computed{border-left:1px solid var(--line)}
-.sheet__monthhead{padding:14px 16px;text-align:right;position:relative;transition:background .2s}
-.sheet__monthhead.is-today{background:color-mix(in srgb,var(--accent) 16%,var(--surface-2))}
-.sheet__monthremove{position:absolute;left:6px;top:50%;transform:translateY(-50%);width:22px;height:22px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:14px;line-height:1;cursor:pointer;opacity:.55;border-radius:6px;display:grid;place-items:center;transition:opacity .15s,color .15s,background .15s,border-color .15s}
-.sheet__monthhead:hover .sheet__monthremove,.sheet__monthremove:focus-visible{opacity:1}
-.sheet__monthremove:hover{opacity:1;color:var(--danger);border-color:var(--danger);background:var(--surface)}
-.sheet__monthname{display:block;font-family:var(--ff-display);font-weight:700;font-size:14px;text-transform:capitalize;letter-spacing:-.01em}
-.sheet__monthyear{display:block;font-family:var(--ff-mono);font-size:10.5px;color:var(--muted);margin-top:1px}
-.sheet__monthbadge{display:inline-block;margin-top:5px;font-family:var(--ff-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-contrast);background:var(--accent);border-radius:999px;padding:2px 8px}
-.sheet__rowhead{position:sticky;left:0;background:var(--surface);z-index:1;padding:12px 14px;font-weight:500;font-size:14px;min-width:172px;border-right:1px solid var(--line);transition:background .15s}
-.sheet tr:nth-child(even) .sheet__rowhead,.sheet tr:nth-child(even) .sheet__cell,.sheet tr:nth-child(even) .sheet__computed{background:var(--surface-2)}
-.row--income .sheet__rowhead,.row--income .sheet__cell{background:var(--accent-soft)!important;font-weight:600}
-.row--addcat .sheet__rowhead{background:var(--surface)!important}
-.row--addcat{cursor:pointer}
-.row--addcat:hover .sheet__rowhead,.row--addcat:hover .cell--ghost{background:var(--accent-soft)!important}
-.row--total .sheet__rowhead,.row--total .sheet__computed{border-top:2px solid var(--line-strong);font-weight:600}
-.row--balance .sheet__rowhead,.row--balance .sheet__computed{font-weight:600}
-.row--cumulative .sheet__rowhead,.row--cumulative .sheet__cell,.row--cumulative .sheet__computed{background:color-mix(in srgb,var(--accent) 16%,var(--surface))!important;font-weight:700}
-.row--cumulative .sheet__rowhead{border-top:1px solid var(--line-strong)}
-.row--expense:hover .sheet__rowhead,.row--expense:hover .sheet__cell{background:var(--accent-soft)!important}
-.sheet__rowhead--editable{display:table-cell;padding:0;position:relative}
-.rowname{width:100%;border:0;background:transparent;padding:12px 34px 12px 14px;font-size:14px;color:var(--ink);min-width:172px;overflow:hidden;text-overflow:ellipsis}
-.rowname:focus{outline:none;background:var(--surface-2)}
-.rowname--ghost{color:var(--accent-ink);font-weight:500;padding-left:38px}
-.rowname__plus{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1;display:grid;place-items:center;pointer-events:none}
-.rowremove{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:20px;height:20px;border:0;background:transparent;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;opacity:0;border-radius:5px;transition:opacity .15s,color .15s,background .15s}
-tr:hover .rowremove{opacity:.7}
-.rowremove:hover{opacity:1;color:var(--danger);background:var(--surface-2)}
+.sheet thead th:not(.sheet__corner){position:sticky;top:0;z-index:3}
+.sheet__corner{position:sticky;top:0;left:0;z-index:4;min-width:100px;background:var(--surface-2);border-right:1px solid var(--line);text-align:left;padding:12px 14px;font-family:var(--ff-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.sheet__colhead,.sheet__cell,.sheet__computed{border-left:1px solid var(--line)}
+/* mesmo tamanho/peso do .colhead__name (que é travado em 16px pelo motivo
+   do zoom no iOS) — assim "Receita"/"Total gastos"/"Saldo" não ficam menores
+   que os nomes de gasto editáveis ao lado, tudo no mesmo cabeçalho. */
+.sheet__colhead{padding:13px 14px;text-align:right;font-family:var(--ff-display);font-weight:600;font-size:16px}
+.sheet__colhead--cat,.sheet__colhead--add{padding:0;text-align:left}
+.sheet__colhead--add{max-width:168px}
+.sheet__colhead--income,.sheet__cell--income{background:var(--accent-soft)!important}
+
+/* cabeçalho de uma coluna de gasto: nome editável + remover, lado a lado em
+   flex — nunca um em cima do outro, o remover só empurra o nome. */
+.colhead{display:flex;align-items:center;gap:2px;padding:6px 6px 6px 12px;min-height:46px}
+/* sem width fixo aqui: o JS mede o texto de cada nome (e de cada valor da
+   coluna) e aplica a largura exata via style="width" — a coluna nasce
+   pequena e só cresce se algum mês precisar, tipo autoajuste do Excel.
+   flex:none (não flex:1): "flex:1" define flex-basis:0%, que ignora o
+   width inline e faz o campo depender só do espaço sobrando — flex:none
+   respeita o width calculado exatamente. */
+.colhead__name{flex:none;min-width:0;border:0;background:transparent;padding:8px 4px;font-size:16px;font-family:var(--ff-display);font-weight:600;color:var(--ink);text-align:right;overflow:hidden;text-overflow:ellipsis}
+.colhead__name:focus{outline:none;background:var(--surface)}
+.colhead__remove{flex:none;width:24px;height:24px;border:0;background:transparent;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;opacity:.55;border-radius:6px;transition:opacity .15s,color .15s,background .15s}
+.colhead__remove:hover{opacity:1;color:var(--danger);background:var(--surface)}
+.colhead--ghost{cursor:pointer}
+.sheet__colhead--add:hover{background:var(--accent-soft)}
+.colhead__plus{flex:none;width:18px;height:18px;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1;display:grid;place-items:center;pointer-events:none}
+.colhead__name--ghost{text-align:left;color:var(--accent-ink);font-weight:500}
+/* etapa 2 do "+ adicionar gasto": some até o nome ser confirmado, depois
+   aparece embaixo pedindo o valor mensal padrão daquele gasto. */
+.newvalue{display:flex;align-items:center;gap:5px;padding:0 10px 8px 12px;border-top:1px solid var(--line)}
+.newvalue__affix{font-family:var(--ff-mono);font-size:11.5px;color:var(--muted);flex:none;margin-top:7px}
+.newvalue__input{flex:1;min-width:0;border:0;background:transparent;padding:7px 0;font-family:var(--ff-mono);font-size:16px;font-weight:500;color:var(--ink)}
+.newvalue__input:focus{outline:none}
+.newvalue__input::placeholder{color:var(--accent-ink);opacity:.7}
+
+/* célula do mês (coluna fixa à esquerda): nome do mês + badge à esquerda,
+   botão de remover à direita, sempre via flex — largura própria cresce se
+   precisar, mas os dois lados nunca se encostam. */
+.sheet__monthcell{position:sticky;left:0;z-index:2;background:var(--surface);border-right:1px solid var(--line);padding:0;min-width:100px;transition:background .15s}
+.monthcell{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:11px 10px 11px 14px;min-height:46px}
+.monthcell__text{display:flex;flex-direction:column;gap:1px;min-width:0}
+.monthcell__name{font-family:var(--ff-display);font-weight:700;font-size:14px;letter-spacing:-.01em}
+.monthcell__year{font-family:var(--ff-mono);font-size:10.5px;color:var(--muted)}
+.monthcell__badge{align-self:flex-start;margin-top:3px;font-family:var(--ff-mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-contrast);background:var(--accent);border-radius:999px;padding:2px 7px}
+.monthcell__remove{flex:none;width:22px;height:22px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:14px;line-height:1;cursor:pointer;opacity:.55;border-radius:6px;display:grid;place-items:center;transition:opacity .15s,color .15s,border-color .15s}
+.monthcell__remove:hover,.monthcell__remove:focus-visible{opacity:1;color:var(--danger);border-color:var(--danger)}
+
+.sheet tbody tr:nth-child(even) > td{background:var(--surface-2)}
+.sheet tbody tr.is-today > td{background:color-mix(in srgb,var(--accent) 14%,var(--surface-2))}
+
 .sheet__cell{padding:0;text-align:right}
-.cellbox{display:flex;align-items:center;justify-content:flex-end;gap:4px;padding:0 16px;height:100%;border-radius:8px}
+.cellbox{display:flex;align-items:center;justify-content:flex-end;gap:4px;padding:0 12px;height:100%;min-height:46px}
 .cellbox__affix{font-family:var(--ff-mono);font-size:11.5px;color:var(--muted);flex:none}
-.cell--default .cellbox__affix{opacity:.55}
-.cellbox__input{width:88px;border:0;background:transparent;padding:12px 0;font-family:var(--ff-mono);font-size:13.5px;font-weight:500;color:var(--ink);text-align:right}
+/* 16px (nunca menos): abaixo disso o iOS Safari dá zoom automático ao
+   focar o campo, e é esse zoom que bagunçava tudo — o layout ficava certo,
+   só que a tela inteira saltava de tamanho e as colunas fixas desalinhavam.
+   Sem width fixo: o JS calcula, por coluna, a largura do maior valor
+   daquele gasto (em todos os meses) e aplica via style="width" — a coluna
+   nasce pequena (mín. 6 dígitos) e só cresce se algum mês precisar. */
+.cellbox__input{width:6ch;min-width:0;border:0;background:transparent;padding:12px 0;font-family:var(--ff-mono);font-size:16px;font-weight:500;color:var(--ink);text-align:right}
 .cellbox__input:focus{outline:none}
-.cellbox__input::placeholder{color:var(--muted);opacity:.55}
+/* o valor padrão (estimativa) aparece como placeholder do input, mas deve
+   ler igual a um valor já lançado — mesma cor, sem esmaecer. */
+.cellbox__input::placeholder{color:var(--ink);opacity:1}
 .cellbox:focus-within{background:var(--accent-soft);box-shadow:inset 0 0 0 1.5px var(--focus)}
-.cell--ghost{background:var(--surface)}
-.sheet__computed{padding:12px 16px;text-align:right;font-family:var(--ff-mono);font-size:14px;font-variant-numeric:tabular-nums}
+/* célula vazia da coluna "+ adicionar gasto": precisa da mesma borda das
+   outras células, senão ela some visualmente e parece grudada na coluna
+   de gasto anterior. */
+.cell--ghost{background:var(--surface);border-left:1px solid var(--line)}
+.sheet__computed{padding:13px 14px;text-align:right;font-family:var(--ff-mono);font-size:14px;font-variant-numeric:tabular-nums}
 .sheet__computed span.is-negative{color:var(--warm)}
 .sheet__computed span.is-positive{color:var(--accent-ink)}
-.row--cumulative .sheet__computed{font-size:15px}
-.row--cumulative .is-negative{color:var(--warm)}
-.row--cumulative .is-positive{color:var(--accent-ink)}
+
+/* ---------- Saldo acumulado (tira só leitura, mês em coluna) ---------- */
+.cumcard{margin-top:18px;padding:20px 22px 22px}
+.cumcard__head{margin-bottom:14px}
+.cum-scroll{overflow-x:auto;overflow-y:hidden;border:1px solid var(--line);border-radius:var(--radius);-webkit-overflow-scrolling:touch;box-shadow:var(--shadow-sm)}
+.cum-scroll{scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+.cum-scroll::-webkit-scrollbar{height:9px}
+.cum-scroll::-webkit-scrollbar-track{background:transparent}
+.cum-scroll::-webkit-scrollbar-thumb{background-color:var(--line-strong);border-radius:999px;border:2px solid var(--surface);background-clip:padding-box}
+.cum-scroll::-webkit-scrollbar-thumb:hover{background-color:var(--muted)}
+.cum{border-collapse:separate;border-spacing:0}
+.cum th,.cum td{border-left:1px solid var(--line);white-space:nowrap;text-align:center}
+.cum th:first-child,.cum td:first-child{border-left:0}
+.cum__monthhead{padding:10px 16px;font-family:var(--ff-display);background:color-mix(in srgb,var(--accent) 10%,var(--surface-2))}
+.cum__monthhead.is-today{background:color-mix(in srgb,var(--accent) 24%,var(--surface-2))}
+.cum__monthname{display:block;font-weight:700;font-size:12.5px;text-transform:capitalize;letter-spacing:-.01em}
+.cum__monthyear{display:block;font-family:var(--ff-mono);font-size:10px;color:var(--muted);margin-top:1px}
+.cum__cell{padding:13px 16px;background:color-mix(in srgb,var(--accent) 6%,var(--surface))}
+.cum__cell.is-today{background:color-mix(in srgb,var(--accent) 16%,var(--surface))}
+.cum__cell span{font-family:var(--ff-mono);font-weight:700;font-size:14.5px;font-variant-numeric:tabular-nums}
+.cum__cell .is-negative{color:var(--warm)}
+.cum__cell .is-positive{color:var(--accent-ink)}
 
 /* ---------- Dialog (confirmação própria do sistema) ---------- */
 .dialog-backdrop{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(15,12,41,.45);opacity:0;pointer-events:none;transition:opacity .18s}
@@ -345,10 +423,13 @@ footer{margin-top:46px;border-top:1px solid var(--line);padding:22px 0 40px;font
   .herostat{padding:18px}
   .sheetcard{padding:16px 16px 18px}
   .sheetcard__head{flex-direction:column}
-  .sheet__rowhead,.sheet__corner,.rowname{min-width:136px}
-  .sheet__monthhead,.sheet__computed{padding-left:10px;padding-right:10px}
+  .sheet-scroll{max-height:min(58vh,560px)}
+  .sheet__corner,.sheet__monthcell{min-width:92px}
+  .sheet__colhead,.sheet__computed{padding-left:10px;padding-right:10px}
+  .monthcell{padding-left:10px;padding-right:8px}
   .cellbox{padding:0 10px;gap:3px}
-  .cellbox__input{width:70px}
+  .cumcard{padding:16px 16px 18px}
+  .cum__monthhead,.cum__cell{padding-left:10px;padding-right:10px}
 }
 @media (max-width:380px){
   .herostats{gap:10px}

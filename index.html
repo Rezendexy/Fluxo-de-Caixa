@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="app-version" content="1">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Meu Fluxo de Caixa</title>
+<title>Fluxo de Caixa</title>
 <meta name="description" content="Controle sua receita e seus gastos mês a mês e acompanhe quanto você já economizou.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#F7F7FA" id="meta-theme-color">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23272259'/%3E%3Cpath d='M8 12h16a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z' fill='none' stroke='%23fff' stroke-width='1.8'/%3E%3Ccircle cx='22' cy='17.5' r='2.3' fill='%233CEFA2'/%3E%3C/svg%3E">
+<link rel="icon" type="image/png" href="frontend/img/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -22,7 +22,7 @@
       <img class="brand__logo brand__logo--light" src="frontend/img/finexperts-preto.png" alt="Financial Experts">
       <img class="brand__logo brand__logo--dark" src="frontend/img/financial-experts-branco.png" alt="Financial Experts">
       <span class="brand__sep" aria-hidden="true"></span>
-      <span class="brand__name">Meu Fluxo de Caixa</span>
+      <span class="brand__name">Fluxo de Caixa</span>
     </a>
 
     <div class="userbox" id="userbox" hidden>
@@ -153,18 +153,19 @@
   <section id="view-onboarding" class="panel" hidden>
     <div class="hero hero--onboarding">
       <h1>Vamos montar seu fluxo de caixa</h1>
-      <p>Só duas etapas rápidas. Depois disso você já vê sua planilha pronta para usar.</p>
+      <p>Só três etapas rápidas. Depois disso você já vê sua planilha pronta para usar, com todos os meses preenchidos.</p>
     </div>
 
-    <div class="tabs tabs--2 tabs--steps" role="list" aria-label="Etapas">
+    <div class="tabs tabs--steps" role="list" aria-label="Etapas">
       <div class="tab tab--step is-active" id="step-tab-1"><span class="tab__n">01</span><span class="tab__t">Sua receita</span></div>
       <div class="tab tab--step" id="step-tab-2"><span class="tab__n">02</span><span class="tab__t">Seus gastos</span></div>
+      <div class="tab tab--step" id="step-tab-3"><span class="tab__n">03</span><span class="tab__t">O período</span></div>
     </div>
 
     <!-- ---- etapa 1: receita ---- -->
     <div class="card" id="step-1">
       <div class="card__head">
-        <p class="card__kicker">Etapa 01 de 02</p>
+        <p class="card__kicker">Etapa 01 de 03</p>
         <h2 class="card__title">Quanto você recebe por mês?</h2>
         <p class="card__sub">Pode ser mesada, salário do primeiro emprego, freelas — o que entrar todo mês no seu bolso.</p>
       </div>
@@ -192,9 +193,9 @@
     <!-- ---- etapa 2: gastos ---- -->
     <div class="card" id="step-2" hidden>
       <div class="card__head">
-        <p class="card__kicker">Etapa 02 de 02</p>
+        <p class="card__kicker">Etapa 02 de 03</p>
         <h2 class="card__title">Quais são os seus gastos do mês?</h2>
-        <p class="card__sub">Só o nome de cada gasto por enquanto — o valor de cada mês você preenche depois, direto na planilha.</p>
+        <p class="card__sub">O nome de cada gasto e quanto ele custa por mês. Esse valor já entra preenchido em todos os meses da sua planilha — você pode ajustar mês a mês depois.</p>
       </div>
       <div class="card__body">
         <div class="chips" id="ob-suggestions">
@@ -216,7 +217,37 @@
 
         <div class="actions">
           <button class="btn btn--ghost glass" type="button" id="ob-step2-back">Voltar</button>
-          <button class="btn btn--primary glass" type="button" id="ob-step2-finish">Concluir e ver meu fluxo de caixa</button>
+          <button class="btn btn--primary glass" type="button" id="ob-step2-next">Continuar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- etapa 3: período ---- -->
+    <div class="card" id="step-3" hidden>
+      <div class="card__head">
+        <p class="card__kicker">Etapa 03 de 03</p>
+        <h2 class="card__title">Por quanto tempo você quer planejar?</h2>
+        <p class="card__sub">A planilha já nasce com todos esses meses preenchidos, começando no mês atual.</p>
+      </div>
+      <div class="card__body">
+        <div class="field">
+          <label for="ob-period">Duração do planejamento</label>
+          <div class="input" id="ob-period-box">
+            <input id="ob-period" type="text" inputmode="numeric" placeholder="12" autocomplete="off">
+            <span class="input__affix">meses</span>
+          </div>
+          <p class="error" role="alert" aria-live="polite" id="ob-period-err"></p>
+          <div class="chips">
+            <button class="chip glass" type="button" data-fill="ob-period" data-value="3">3 meses</button>
+            <button class="chip glass" type="button" data-fill="ob-period" data-value="6">6 meses</button>
+            <button class="chip glass" type="button" data-fill="ob-period" data-value="12">12 meses</button>
+            <button class="chip glass" type="button" data-fill="ob-period" data-value="24">24 meses</button>
+          </div>
+          <p class="ob-period-preview" id="ob-period-preview">&nbsp;</p>
+        </div>
+        <div class="actions">
+          <button class="btn btn--ghost glass" type="button" id="ob-step3-back">Voltar</button>
+          <button class="btn btn--primary glass" type="button" id="ob-step3-finish">Concluir e ver meu fluxo de caixa</button>
         </div>
       </div>
     </div>
@@ -224,6 +255,36 @@
 
   <!-- ============ PLANILHA ============ -->
   <section id="view-sheet" class="panel" hidden>
+
+    <div class="sheetcard card">
+      <div class="sheetcard__head">
+        <div>
+          <p class="card__kicker">Sua planilha</p>
+          <h2 class="card__title">Projeção de gastos</h2>
+        </div>
+        <button class="btn btn--ghost glass btn--sm" type="button" id="btn-add-month">+ Adicionar mês</button>
+      </div>
+      <p class="sheet-savehint" id="sheet-savehint" aria-live="polite">&nbsp;</p>
+      <div class="sheet-scroll" id="sheet-scroll">
+        <table class="sheet" id="sheet-table">
+          <thead id="sheet-thead"></thead>
+          <tbody id="sheet-tbody"></tbody>
+        </table>
+      </div>
+      <p class="sheet-scrollhint" id="sheet-scrollhint" aria-hidden="true">◄ arraste para o lado para ver os outros gastos ►</p>
+    </div>
+
+    <div class="cumcard card">
+      <div class="cumcard__head">
+        <h2 class="card__title">Saldo acumulado</h2>
+      </div>
+      <div class="cum-scroll" id="cum-scroll">
+        <table class="cum" id="cum-table">
+          <thead id="cum-thead"></thead>
+          <tbody id="cum-tbody"></tbody>
+        </table>
+      </div>
+    </div>
 
     <div class="herostats">
       <div class="card herostat herostat--big" id="hs-total">
@@ -248,24 +309,6 @@
         <p class="chart__title">Evolução da sua economia acumulada</p>
       </div>
       <div id="sheet-chart" data-chart></div>
-    </div>
-
-    <div class="sheetcard card">
-      <div class="sheetcard__head">
-        <div>
-          <p class="card__kicker">Sua planilha</p>
-          <h2 class="card__title">Receita e gastos, mês a mês</h2>
-        </div>
-        <button class="btn btn--ghost glass btn--sm" type="button" id="btn-add-month">+ Adicionar mês</button>
-      </div>
-      <p class="sheet-savehint" id="sheet-savehint" aria-live="polite">&nbsp;</p>
-      <div class="sheet-scroll" id="sheet-scroll">
-        <table class="sheet" id="sheet-table">
-          <thead id="sheet-thead"></thead>
-          <tbody id="sheet-tbody"></tbody>
-        </table>
-      </div>
-      <p class="sheet-scrollhint" id="sheet-scrollhint" aria-hidden="true">◄ arraste para o lado para ver os outros meses ►</p>
     </div>
 
   </section>

@@ -97,10 +97,12 @@
           setMsg("signup-err", friendlyError(res.error.message));
           return;
         }
-        // onAuthStateChange já assume daqui; garante o nome no perfil mesmo que
-        // o gatilho do banco ainda não tenha sido atualizado.
+        // onAuthStateChange já assume daqui; upsert (não update) garante o
+        // nome no perfil mesmo que o gatilho do banco que cria a linha em
+        // "profiles" ainda não tenha rodado (um update simples casaria zero
+        // linhas nesse caso, sem erro nenhum, e o nome nunca seria salvo).
         if (res.data && res.data.user) {
-          global.DB.client.from("profiles").update({ full_name: name }).eq("id", res.data.user.id).then(function () {});
+          global.DB.client.from("profiles").upsert({ id: res.data.user.id, full_name: name }, { onConflict: "id" }).then(function () {});
         }
       });
     });
