@@ -81,6 +81,11 @@
       window.AuthView.showRecovery();
       return;
     }
+    // TOKEN_REFRESHED dispara sozinho em segundo plano pra renovar a sessão,
+    // sem o usuário fazer nada — se recarregássemos a planilha aqui, qualquer
+    // valor ainda não salvo com sucesso (ex.: upsert que falhou) desaparecia
+    // sozinho da tela minutos depois, sem nenhuma ação do usuário.
+    if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") return;
     route(session);
   });
 
